@@ -1,0 +1,94 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+*.swo
+*.tmp
+*.temp
+.DS_Store
+.AppleDouble
+.LSOverride
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+.Trash-*/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Editor/user state
+.vscode/
+*.code-workspace
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+.packages
+pubspec.lock.tmp
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Flutter platform-generated intermediates
+**/Flutter/ephemeral/
+**/Flutter/Generated.xcconfig
+**/Flutter/flutter_export_environment.sh
+**/.symlinks/
+
+# CocoaPods / Xcode generated files
+ios/Pods/
+macos/Pods/
+**/xcuserdata/
+**/*.xcuserstate
+DerivedData/
+
+# Native build products
+*.dSYM/
+*.app/
+*.ipa
+*.apk
+*.aab
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Test/log output
+test-results/
+reports/
+logs/
+
+# Archives/installers
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.dmg
