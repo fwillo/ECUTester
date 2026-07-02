@@ -151,6 +151,13 @@ It builds:
 
 Each workflow run uploads zipped build artifacts. In GitHub, open the workflow run and download them from the **Artifacts** section.
 
+Pushing a version tag also creates a GitHub Release with the macOS and Windows zip files attached:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
 ## macOS Notes
 
 The app name shown in the macOS title bar is configured in:
