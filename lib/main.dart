@@ -857,12 +857,13 @@ class _TestResultScreenState extends State<TestResultScreen> {
                       side: const BorderSide(color: Colors.white70),
                     ),
                     onPressed: () {
-                      Navigator.of(context).pushReplacement(
+                      Navigator.of(context).pushAndRemoveUntil(
                         MaterialPageRoute<void>(
                           builder: (_) => UartSelectionScreen(
                             serialService: widget.serialService,
                           ),
                         ),
+                        (_) => false,
                       );
                     },
                     icon: const Icon(Icons.replay),
