@@ -136,6 +136,21 @@ flutter analyze
 flutter test
 ```
 
+## GitHub Builds
+
+The repository includes a GitHub Actions workflow at:
+
+```text
+.github/workflows/build-desktop.yml
+```
+
+It builds:
+
+- macOS release app
+- Windows x64 release app
+
+Each workflow run uploads zipped build artifacts. In GitHub, open the workflow run and download them from the **Artifacts** section.
+
 ## macOS Notes
 
 The app name shown in the macOS title bar is configured in:

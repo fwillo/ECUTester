@@ -1,0 +1,98 @@
+name: Build desktop apps
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install native build tools
+        run: brew install automake libtool
+
+      - name: Disable experimental Swift Package Manager integration
+        run: flutter config --no-enable-swift-package-manager
+
+      - name: Fetch dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build macOS release
+        run: flutter build macos --release
+
+      - name: Package macOS app
+        run: |
+          mkdir -p artifacts
+          ditto -c -k --sequesterRsrc --keepParent \
+            "build/macos/Build/Products/Release/BremerECU Production Tester.app" \
+            "artifacts/BremerECU-Production-Tester-macos.zip"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BremerECU-Production-Tester-macos
+          path: artifacts/BremerECU-Production-Tester-macos.zip
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Fetch dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Windows x64 release
+        run: flutter build windows --release
+
+      - name: Package Windows app
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Compress-Archive `
+            -Path "build\windows\x64\runner\Release\*" `
+            -DestinationPath "artifacts\BremerECU-Production-Tester-windows-x64.zip" `
+            -Force
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BremerECU-Production-Tester-windows-x64
+          path: artifacts/BremerECU-Production-Tester-windows-x64.zip
+          if-no-files-found: error
