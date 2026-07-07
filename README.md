@@ -1,12 +1,15 @@
 # BremerECU Production Tester
 
-BremerECU Production Tester is a Flutter desktop application for final PCBA production testing over UART. It connects to a BremerECU-compatible board, samples selected ECU output channels, shows live measurements during collection, then produces a clear PASS or FAIL result for the operator.
+BremerECU Production Tester is a Flutter desktop application for initial PCBA programming and final production testing. It first guides the operator through TC2030 JTAG/SWD connection and flashes the initial firmware with STM32CubeProgrammer CLI. It then connects to a BremerECU-compatible board over UART, samples selected ECU output channels, shows live measurements during collection, and produces a clear PASS or FAIL result for the operator.
 
-The tool is designed for a production bench: select the detected tester UART, watch live values while the sample set is collected, and record the result with a numbered CSV log for traceability.
+The tool is designed for a production bench: program the bare board, select the detected tester UART, watch live values while the sample set is collected, and record the result with a numbered CSV log for traceability.
 
 ## Features
 
 - Lists only the intended USB serial device: VID `0483`, PID `5740`.
+- Shows the TC2030 connection graphic before programming.
+- Lets the operator select the `STM32_Programmer_CLI` executable, firmware binary, debug interface, and flash address.
+- Programs via STM32CubeProgrammer CLI with verify and reset.
 - Connects at `115200 8N1`.
 - Requests ECU output-channel data at 10 Hz.
 - Collects `100` frames per test.
@@ -35,12 +38,16 @@ A test passes only when all metric averages are inside their configured ranges.
 
 ## Operator Workflow
 
-1. Connect the PCBA/tester UART to the Mac.
+1. Connect the TC2030 cable to the bare board as shown in the application.
 2. Start the application.
-3. Select the listed UART device.
-4. Wait while the live dashboard collects 100 frames.
-5. Read the final PASS or FAIL result.
-6. If the result is FAIL, review the displayed failure reasons.
+3. Select the STM32CubeProgrammer CLI executable if the default path is not correct.
+4. Select the initial firmware `.bin` file.
+5. Confirm the debug interface and flash address, then run programming.
+6. After programming succeeds, connect the PCBA/tester UART and continue to the UART test.
+7. Select the listed UART device.
+8. Wait while the live dashboard collects 100 frames.
+9. Read the final PASS or FAIL result.
+10. If the result is FAIL, review the displayed failure reasons.
 
 The result screen also shows the saved CSV path for the completed test.
 
@@ -104,6 +111,7 @@ Install Flutter and ensure macOS desktop support is enabled. This project uses:
 
 - `flutter_libserialport`
 - `crc32_checksum`
+- `file_selector`
 
 Fetch dependencies:
 
@@ -173,9 +181,10 @@ The macOS sandbox is disabled for this tool because serial device access require
 ## Project Structure
 
 ```text
-lib/main.dart             UI, serial device selection, live collection, result screen
-lib/ecu_protocol.dart     ECU request/response protocol, frame parsing, pass/fail rules
-lib/test_log_writer.dart  CSV log persistence and per-device numbering
+lib/main.dart                  UI, initial programming, serial device selection, live collection, result screen
+lib/initial_programming.dart   STM32CubeProgrammer CLI command building and execution
+lib/ecu_protocol.dart          ECU request/response protocol, frame parsing, pass/fail rules
+lib/test_log_writer.dart       CSV log persistence and per-device numbering
 test/                     Protocol and log writer tests
 macos/                    macOS desktop runner configuration
 ```
