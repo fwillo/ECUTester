@@ -181,10 +181,16 @@ The macOS sandbox is disabled for this tool because serial device access require
 ## Project Structure
 
 ```text
-lib/main.dart                  UI, initial programming, serial device selection, live collection, result screen
-lib/initial_programming.dart   STM32CubeProgrammer CLI command building and execution
-lib/ecu_protocol.dart          ECU request/response protocol, frame parsing, pass/fail rules
-lib/test_log_writer.dart       CSV log persistence and per-device numbering
-test/                     Protocol and log writer tests
-macos/                    macOS desktop runner configuration
+lib/main.dart                               App entry point, theme, and shared library wiring
+lib/initial_programming.dart                STM32CubeProgrammer CLI command building and execution
+lib/ecu_protocol.dart                       ECU request/response protocol, frame parsing, pass/fail rules
+lib/test_log_writer.dart                    CSV log persistence and per-device numbering
+lib/src/serial_transport.dart               Serial port abstractions and libserialport implementation
+lib/src/screens/initial_programming_screen.dart
+lib/src/screens/uart_selection_screen.dart
+lib/src/screens/data_collection_screen.dart
+lib/src/screens/test_result_screen.dart
+lib/src/widgets/shared_widgets.dart         Small shared UI widgets
+test/                                       Protocol, programming, and log writer tests
+macos/                                      macOS desktop runner configuration
 ```
