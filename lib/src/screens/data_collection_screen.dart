@@ -64,9 +64,7 @@ class _DataCollectionScreenState extends State<DataCollectionScreen> {
   }
 
   void _handleBytes(Uint8List data) {
-    _logSerial('RX chunk ${data.length} bytes: ${_hexBytes(data)}');
     _rxBuffer.addAll(data);
-    _logSerial('RX buffer now ${_rxBuffer.length} bytes');
 
     while (_frames.length < ecuFrameTarget) {
       final payload = _takePayload();
@@ -74,9 +72,6 @@ class _DataCollectionScreenState extends State<DataCollectionScreen> {
 
       try {
         final frame = EcuProtocol.parseFrame(payload);
-        _logSerial(
-          'Parsed frame ${_frames.length + 1}: ${frame.toDebugString()}',
-        );
         setState(() {
           _latestFrame = frame;
           _frames.add(frame);
@@ -115,10 +110,6 @@ class _DataCollectionScreenState extends State<DataCollectionScreen> {
 
     try {
       final response = EcuProtocol.extractResponse(packet);
-      _logSerial(
-        'Response OK: body=$ecuResponseBodyLength bytes, status=${response.status}, '
-        'payload=${response.payload.length} bytes, crc=0x${response.crc.toRadixString(16).padLeft(8, '0').toUpperCase()}',
-      );
       return response.payload;
     } on FormatException catch (error) {
       _logSerial('Dropped malformed response: ${error.message}');
@@ -292,8 +283,7 @@ class MetricTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final latestText = latest == null ? '--' : metric.format(latest!);
     final averageText = average == null ? '--' : metric.format(average!);
-    final inRange =
-        average == null || (average! >= metric.min && average! <= metric.max);
+    final inRange = average == null || metric.isPassing(average!);
     final color = inRange ? const Color(0xff2f6f5e) : const Color(0xffb42318);
 
     return Card(
@@ -355,6 +345,9 @@ class MetricTile extends StatelessWidget {
       EcuMetric.coolant => Icons.thermostat,
       EcuMetric.map => Icons.compress,
       EcuMetric.acceleratorPedal => Icons.pedal_bike,
+      EcuMetric.vBatt => Icons.battery_charging_full,
+      EcuMetric.jssState => Icons.arrow_upward,
+      EcuMetric.iat => Icons.air,
     };
   }
 }

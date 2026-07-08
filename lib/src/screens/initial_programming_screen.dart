@@ -136,7 +136,7 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Connect the TC2030 cable to the bare board, program the initial firmware, then continue to the UART production test.',
+                    'Connect the TC2030 cable to program a bare board, or continue directly to the UART production test for an already programmed device.',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 22),
@@ -294,31 +294,47 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
               ),
               const SizedBox(height: 12),
             ],
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _programming ? null : _programDevice,
-                    icon: _programming
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2.5),
-                          )
-                        : const Icon(Icons.play_arrow),
-                    label: Text(_programming ? 'Programming...' : 'Program'),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final programButton = FilledButton.icon(
+                  onPressed: _programming ? null : _programDevice,
+                  icon: _programming
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        )
+                      : const Icon(Icons.play_arrow),
+                  label: Text(_programming ? 'Programming...' : 'Program'),
+                );
+                final testButton = OutlinedButton.icon(
+                  onPressed: _programming ? null : _continueToTesting,
+                  icon: const Icon(Icons.chevron_right),
+                  label: Text(
+                    programmed
+                        ? 'Continue to UART Test'
+                        : 'Test Already Programmed',
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: programmed && !_programming
-                        ? _continueToTesting
-                        : null,
-                    icon: const Icon(Icons.chevron_right),
-                    label: const Text('Continue to UART Test'),
-                  ),
-                ),
-              ],
+                );
+
+                if (constraints.maxWidth < 620) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      programButton,
+                      const SizedBox(height: 10),
+                      testButton,
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(child: programButton),
+                    const SizedBox(width: 12),
+                    Expanded(child: testButton),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 16),
             Expanded(child: _ProgramOutput(result: _lastResult)),

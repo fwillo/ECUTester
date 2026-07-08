@@ -11,13 +11,16 @@ The tool is designed for a production bench: program the bare board, select the 
 - Lets the operator select the `STM32_Programmer_CLI` executable, firmware binary, debug interface, and flash address.
 - Programs via STM32CubeProgrammer CLI with verify and reset.
 - Connects at `115200 8N1`.
-- Requests ECU output-channel data at 10 Hz.
+- Requests ECU output-channel data on a 10 Hz schedule, limited by UART response time.
 - Collects `100` frames per test.
 - Shows a live dashboard for:
   - RPM
   - CLT
   - MAP
   - Accelerator Pedal
+  - VBatt
+  - JSS State
+  - IAT
 - Validates averages against configured production limits.
 - Displays a high-visibility PASS/FAIL result screen.
 - Shows failure reasons when a metric is outside range.
@@ -29,10 +32,13 @@ The current pass criteria are configured in [lib/ecu_protocol.dart](lib/ecu_prot
 
 | Metric | Passing average range |
 | --- | ---: |
-| RPM | `990-1010 RPM` |
-| CLT | `66.0-67.5 C` |
-| MAP | `39.5-40.5 kPa` |
-| Accelerator Pedal | `11.0-13.0 %` |
+| RPM | `>= 990 and <= 1010 RPM` |
+| CLT | `>= 66.6 and <= 67.0 C` |
+| MAP | `>= 45.4 and <= 45.8 kPa` |
+| Accelerator Pedal | `>= 13.5 and <= 13.9 %` |
+| VBatt | `> 11.00 and < 13.00 V` |
+| JSS State | `>= 0.00 and <= 0.00` |
+| IAT | `> 5.0 and < 6.0 C` |
 
 A test passes only when all metric averages are inside their configured ranges.
 
@@ -43,11 +49,12 @@ A test passes only when all metric averages are inside their configured ranges.
 3. Select the STM32CubeProgrammer CLI executable if the default path is not correct.
 4. Select the initial firmware `.bin` file.
 5. Confirm the debug interface and flash address, then run programming.
-6. After programming succeeds, connect the PCBA/tester UART and continue to the UART test.
-7. Select the listed UART device.
-8. Wait while the live dashboard collects 100 frames.
-9. Read the final PASS or FAIL result.
-10. If the result is FAIL, review the displayed failure reasons.
+6. For an already programmed board, use **Test Already Programmed** to skip flashing.
+7. After programming succeeds, or after skipping programming, connect the PCBA/tester UART and continue to the UART test.
+8. Select the listed UART device.
+9. Wait while the live dashboard collects 100 frames.
+10. Read the final PASS or FAIL result.
+11. If the result is FAIL, review the displayed failure reasons.
 
 The result screen also shows the saved CSV path for the completed test.
 
@@ -83,7 +90,7 @@ The log-writing code lives in [lib/test_log_writer.dart](lib/test_log_writer.dar
 
 ## Serial Protocol
 
-The app sends the ECU output-channel request command `O` with offset `0` and length `38`.
+The app sends the ECU output-channel request command `O` with offset `0` and length `1397`. This intentionally uses one larger continuous request so the high-offset `jssState` output channel can be read in the same frame as the other metrics.
 
 Request format:
 
@@ -94,13 +101,13 @@ Request format:
 Response format currently handled by the app:
 
 ```text
-<body length:u16-be> <status:u8> <38-byte output payload> <crc32:u32-be>
+<body length:u16-be> <status:u8> <1397-byte output payload> <crc32:u32-be>
 ```
 
 For the configured request, the expected response is:
 
 ```text
-00 27 <39-byte body> <4-byte CRC>
+05 76 <1398-byte body> <4-byte CRC>
 ```
 
 The response CRC is validated before any metrics are parsed.

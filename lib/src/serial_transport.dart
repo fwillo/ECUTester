@@ -140,14 +140,13 @@ class LibSerialConnection implements EcuSerialConnection {
     if (_disposed) return Uint8List(0);
 
     final request = EcuProtocol.makeDataRequest();
-    final written = _port.write(request, timeout: 50);
-    _logSerial('TX $written/${request.length} bytes: ${_hexBytes(request)}');
+    _port.write(request, timeout: 50);
     return _readResponseBytes();
   }
 
   Future<Uint8List> _readResponseBytes() async {
     final bytes = BytesBuilder(copy: false);
-    final deadline = DateTime.now().add(const Duration(milliseconds: 80));
+    final deadline = DateTime.now().add(const Duration(milliseconds: 250));
 
     while (!_disposed &&
         _port.isOpen &&

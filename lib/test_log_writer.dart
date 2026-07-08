@@ -156,22 +156,38 @@ class TestLogWriter {
       );
     }
 
-    buffer.writeln('frame,rpm,clt_c,map_kpa,accelerator_pedal_percent');
+    buffer.writeln(
+      ['frame', ...EcuMetric.values.map(_metricColumnName)].join(','),
+    );
     for (var i = 0; i < result.frames.length; i++) {
       final frame = result.frames[i];
       buffer.writeln(
         [
           i + 1,
-          frame.rpm.toStringAsFixed(4),
-          frame.coolantC.toStringAsFixed(4),
-          frame.mapKpa.toStringAsFixed(4),
-          frame.acceleratorPedalPercent.toStringAsFixed(4),
+          for (final metric in EcuMetric.values)
+            _metricCsvValue(frame.valueFor(metric), metric),
         ].join(','),
       );
     }
 
     return buffer.toString();
   }
+}
+
+String _metricColumnName(EcuMetric metric) {
+  return switch (metric) {
+    EcuMetric.rpm => 'rpm',
+    EcuMetric.coolant => 'clt_c',
+    EcuMetric.map => 'map_kpa',
+    EcuMetric.acceleratorPedal => 'accelerator_pedal_percent',
+    EcuMetric.vBatt => 'vbatt_v',
+    EcuMetric.jssState => 'jss_state',
+    EcuMetric.iat => 'iat_c',
+  };
+}
+
+String _metricCsvValue(double value, EcuMetric metric) {
+  return value.toStringAsFixed(4);
 }
 
 String? _hexId(String prefix, int? value) {

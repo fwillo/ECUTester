@@ -9,7 +9,7 @@ void main() {
     final request = EcuProtocol.makeDataRequest();
 
     expect(request.length, 11);
-    expect(request.sublist(0, 7), [0x00, 0x05, 0x4f, 0x00, 0x00, 0x26, 0x00]);
+    expect(request.sublist(0, 7), [0x00, 0x05, 0x4f, 0x00, 0x00, 0x75, 0x05]);
 
     final crc = ByteData.sublistView(request).getUint32(7, Endian.big);
     expect(crc, Crc32.calculate(request.sublist(2, 7)));
@@ -20,8 +20,11 @@ void main() {
     ByteData.sublistView(payload)
       ..setUint16(4, 1050, Endian.little)
       ..setInt16(16, 6500, Endian.little)
+      ..setInt16(18, 550, Endian.little)
       ..setInt16(26, 3500, Endian.little)
-      ..setUint16(34, 1800, Endian.little);
+      ..setUint16(34, 1800, Endian.little)
+      ..setUint16(40, 12250, Endian.little)
+      ..setInt8(1396, 0);
 
     final frame = EcuProtocol.parseFrame(payload);
 
@@ -29,62 +32,27 @@ void main() {
     expect(frame.coolantC, 65);
     expect(frame.acceleratorPedalPercent, 35);
     expect(frame.mapKpa, 60);
+    expect(frame.vBatt, 12.25);
+    expect(frame.jssStateRaw, 0);
+    expect(
+      EcuMetric.jssState.format(frame.valueFor(EcuMetric.jssState)),
+      '0.00',
+    );
+    expect(frame.iatC, 5.5);
   });
 
   test('extracts a logged response packet', () {
-    final packet = Uint8List.fromList([
-      0x00,
-      0x27,
-      0x00,
-      0x00,
-      0x00,
-      0x21,
-      0x02,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x22,
-      0x00,
-      0xE8,
-      0x0C,
-      0xC9,
-      0x0C,
-      0xB1,
-      0xFF,
-      0xBB,
-      0xF4,
-      0xB1,
-      0xFF,
-      0xD5,
-      0xF6,
-      0x77,
-      0x13,
-      0x00,
-      0x00,
-      0xE5,
-      0x01,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x33,
-      0x07,
-      0x00,
-      0x0C,
-      0x59,
-      0xDF,
-      0x84,
-      0xC9,
-    ]);
+    final body = Uint8List(ecuResponseBodyLength);
+    body[0] = 0;
+    body.setRange(1, body.length, Uint8List(ecuDataLength));
+    final crc = Crc32.calculate(body);
+    final packet = _responsePacket(body, crc);
 
     final response = EcuProtocol.extractResponse(packet);
 
     expect(response.status, 0);
     expect(response.payload.length, ecuDataLength);
-    expect(response.crc, 0x59DF84C9);
+    expect(response.crc, crc);
   });
 
   test('summarizes passing and failing averages', () {
@@ -92,9 +60,12 @@ void main() {
       ecuFrameTarget,
       (_) => const EcuFrame(
         rpm: 1000,
-        coolantC: 66.5,
-        mapKpa: 40,
-        acceleratorPedalPercent: 12,
+        coolantC: 66.8,
+        mapKpa: 45.6,
+        acceleratorPedalPercent: 13.7,
+        vBatt: 12,
+        jssStateRaw: 0,
+        iatC: 5.5,
       ),
     );
 
@@ -104,9 +75,12 @@ void main() {
       ecuFrameTarget,
       (_) => const EcuFrame(
         rpm: 900,
-        coolantC: 66.5,
-        mapKpa: 40,
-        acceleratorPedalPercent: 12,
+        coolantC: 66.8,
+        mapKpa: 45.6,
+        acceleratorPedalPercent: 13.7,
+        vBatt: 12,
+        jssStateRaw: 0,
+        iatC: 5.5,
       ),
     );
 
@@ -114,4 +88,17 @@ void main() {
     expect(result.passed, isFalse);
     expect(result.failureReasons.single, contains('RPM average 900 RPM'));
   });
+}
+
+Uint8List _responsePacket(Uint8List body, int crc) {
+  final packet = Uint8List(ecuResponsePacketLength);
+  final data = ByteData.sublistView(packet);
+  data.setUint16(0, body.length, Endian.big);
+  packet.setRange(
+    ecuPacketLengthPrefixLength,
+    ecuPacketLengthPrefixLength + body.length,
+    body,
+  );
+  data.setUint32(ecuPacketLengthPrefixLength + body.length, crc, Endian.big);
+  return packet;
 }

@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:crc32_checksum/crc32_checksum.dart';
 
 const int ecuDataOffset = 0;
-const int ecuDataLength = 38;
+const int ecuDataLength = 1397;
 const int ecuResponseStatusLength = 1;
 const int ecuResponseBodyLength = ecuResponseStatusLength + ecuDataLength;
 const int ecuPacketLengthPrefixLength = 2;
@@ -44,8 +44,11 @@ class EcuProtocol {
     return EcuFrame(
       rpm: data.getUint16(4, Endian.little).toDouble(),
       coolantC: data.getInt16(16, Endian.little) * 0.01,
+      iatC: data.getInt16(18, Endian.little) * 0.01,
       acceleratorPedalPercent: data.getInt16(26, Endian.little) * 0.01,
       mapKpa: data.getUint16(34, Endian.little) * (1 / 30),
+      vBatt: data.getUint16(40, Endian.little) * 0.001,
+      jssStateRaw: data.getInt8(1396),
     );
   }
 
@@ -102,12 +105,18 @@ class EcuFrame {
     required this.coolantC,
     required this.mapKpa,
     required this.acceleratorPedalPercent,
+    required this.vBatt,
+    required this.jssStateRaw,
+    required this.iatC,
   });
 
   final double rpm;
   final double coolantC;
   final double mapKpa;
   final double acceleratorPedalPercent;
+  final double vBatt;
+  final int jssStateRaw;
+  final double iatC;
 
   double valueFor(EcuMetric metric) {
     return switch (metric) {
@@ -115,6 +124,9 @@ class EcuFrame {
       EcuMetric.coolant => coolantC,
       EcuMetric.map => mapKpa,
       EcuMetric.acceleratorPedal => acceleratorPedalPercent,
+      EcuMetric.vBatt => vBatt,
+      EcuMetric.jssState => jssStateRaw.toDouble(),
+      EcuMetric.iat => iatC,
     };
   }
 
@@ -124,30 +136,58 @@ class EcuFrame {
       'CLT=${coolantC.toStringAsFixed(2)} C',
       'MAP=${mapKpa.toStringAsFixed(2)} kPa',
       'Pedal=${acceleratorPedalPercent.toStringAsFixed(2)} %',
+      'VBatt=${vBatt.toStringAsFixed(3)} V',
+      'JSS=${jssStateRaw.toDouble().toStringAsFixed(2)}',
+      'IAT=${iatC.toStringAsFixed(2)} C',
     ].join(', ');
   }
 }
 
 enum EcuMetric {
   rpm('RPM', 'RPM', 990, 1010, 0),
-  coolant('CLT', 'C', 66.0, 67.5, 1),
-  map('MAP', 'kPa', 39.5, 40.5, 1),
-  acceleratorPedal('Accelerator Pedal', '%', 11, 13, 1);
+  coolant('CLT', 'C', 66.6, 67.0, 1),
+  map('MAP', 'kPa', 45.4, 45.8, 1),
+  acceleratorPedal('Accelerator Pedal', '%', 13.5, 13.9, 1),
+  vBatt('VBatt', 'V', 11, 13, 2, minInclusive: false, maxInclusive: false),
+  jssState('JSS State', '', 0, 0, 2),
+  iat('IAT', 'C', 5, 6, 1, minInclusive: false, maxInclusive: false);
 
-  const EcuMetric(this.label, this.unit, this.min, this.max, this.decimals);
+  const EcuMetric(
+    this.label,
+    this.unit,
+    this.min,
+    this.max,
+    this.decimals, {
+    this.minInclusive = true,
+    this.maxInclusive = true,
+  });
 
   final String label;
   final String unit;
   final double min;
   final double max;
   final int decimals;
+  final bool minInclusive;
+  final bool maxInclusive;
+
+  bool isPassing(double value) {
+    final aboveMin = minInclusive ? value >= min : value > min;
+    final belowMax = maxInclusive ? value <= max : value < max;
+    return aboveMin && belowMax;
+  }
 
   String format(double value) {
-    return '${value.toStringAsFixed(decimals)} $unit';
+    final formatted = value.toStringAsFixed(decimals);
+    return unit.isEmpty ? formatted : '$formatted $unit';
   }
 
   String get rangeLabel {
-    return '${min.toStringAsFixed(decimals)}-${max.toStringAsFixed(decimals)} $unit';
+    final minOperator = minInclusive ? '>=' : '>';
+    final maxOperator = maxInclusive ? '<=' : '<';
+    final formatted =
+        '$minOperator ${min.toStringAsFixed(decimals)} and '
+        '$maxOperator ${max.toStringAsFixed(decimals)}';
+    return unit.isEmpty ? formatted : '$formatted $unit';
   }
 }
 
@@ -179,7 +219,7 @@ class TestResult {
     final failureReasons = <String>[];
     for (final metric in EcuMetric.values) {
       final average = averages[metric]!;
-      if (average < metric.min || average > metric.max) {
+      if (!metric.isPassing(average)) {
         failureReasons.add(
           '${metric.label} average ${metric.format(average)} outside ${metric.rangeLabel}',
         );

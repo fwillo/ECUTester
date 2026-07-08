@@ -27,18 +27,6 @@ void _logSerial(String message) {
   }
 }
 
-String _hexBytes(List<int> bytes, {int maxBytes = 80}) {
-  final shown = bytes
-      .take(maxBytes)
-      .map((byte) {
-        return byte.toRadixString(16).padLeft(2, '0').toUpperCase();
-      })
-      .join(' ');
-
-  if (bytes.length <= maxBytes) return shown;
-  return '$shown ... +${bytes.length - maxBytes} bytes';
-}
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(EcuTesterApp(serialService: LibSerialPortService()));
