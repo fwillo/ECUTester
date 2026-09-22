@@ -21,6 +21,8 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
   var _debugInterface = DebugInterface.swd;
   var _programming = false;
   ProgrammingResult? _lastResult;
+  SavedProgrammingLog? _savedLog;
+  String? _logError;
   String? _error;
 
   @override
@@ -46,6 +48,8 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
     if (_programming || (_lastResult == null && _error == null)) return;
     setState(() {
       _lastResult = null;
+      _savedLog = null;
+      _logError = null;
       _error = null;
     });
   }
@@ -78,6 +82,8 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
       _programming = true;
       _error = null;
       _lastResult = null;
+      _savedLog = null;
+      _logError = null;
     });
 
     try {
@@ -96,6 +102,15 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
             ? null
             : 'STM32CubeProgrammer exited with code ${result.exitCode}.';
       });
+
+      try {
+        final savedLog = await ProgrammingLogWriter().save(result);
+        if (!mounted) return;
+        setState(() => _savedLog = savedLog);
+      } catch (error) {
+        if (!mounted) return;
+        setState(() => _logError = error.toString());
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
@@ -291,6 +306,21 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                 icon: Icons.check_circle_outline,
                 color: Color(0xff087443),
                 text: 'Initial firmware programmed and verified.',
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_savedLog != null) ...[
+              _ProgrammingNotice(
+                icon: Icons.description_outlined,
+                color: const Color(0xff2f6f5e),
+                text: 'Programming log saved: ${_savedLog!.file.path}',
+              ),
+              const SizedBox(height: 12),
+            ] else if (_logError != null) ...[
+              _ProgrammingNotice(
+                icon: Icons.warning_amber,
+                color: const Color(0xffb54708),
+                text: 'Programming log save failed: $_logError',
               ),
               const SizedBox(height: 12),
             ],
@@ -496,6 +526,15 @@ class _ProgramOutput extends StatelessWidget {
     final output = result == null
         ? 'Programmer output will appear here.'
         : [
+            'Device ID: ${result!.deviceId}',
+            '',
+            result!.uidReadCommandLine,
+            '',
+            if (result!.uidReadStdout.trim().isNotEmpty)
+              result!.uidReadStdout.trimRight(),
+            if (result!.uidReadStderr.trim().isNotEmpty)
+              result!.uidReadStderr.trimRight(),
+            '',
             result!.commandLine,
             '',
             if (result!.stdout.trim().isNotEmpty) result!.stdout.trimRight(),

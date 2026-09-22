@@ -9,6 +9,7 @@ The tool is designed for a production bench: program the bare board, select the 
 - Lists only the intended USB serial device: VID `0483`, PID `5740`.
 - Shows the TC2030 connection graphic before programming.
 - Lets the operator select the `STM32_Programmer_CLI` executable, firmware binary, debug interface, and flash address.
+- Reads the STM32F767 96-bit unique device ID over SWD/JTAG before programming.
 - Programs via STM32CubeProgrammer CLI with verify and reset.
 - Connects at `115200 8N1`.
 - Requests ECU output-channel data on a 10 Hz schedule, limited by UART response time.
@@ -48,7 +49,7 @@ A test passes only when all metric averages are inside their configured ranges.
 2. Start the application.
 3. Select the STM32CubeProgrammer CLI executable if the default path is not correct.
 4. Select the initial firmware `.bin` file.
-5. Confirm the debug interface and flash address, then run programming.
+5. Confirm the debug interface and flash address, then run programming. The app reads the STM32F767 unique ID before flashing and aborts if the ID cannot be read.
 6. For an already programmed board, use **Test Already Programmed** to skip flashing.
 7. After programming succeeds, or after skipping programming, connect the PCBA/tester UART and continue to the UART test.
 8. Select the listed UART device.
@@ -59,6 +60,22 @@ A test passes only when all metric averages are inside their configured ranges.
 The result screen also shows the saved CSV path for the completed test.
 
 ## Log Files
+
+Each programming attempt that successfully reads an MCU unique ID is saved automatically as a CSV file under:
+
+```text
+~/Documents/BremerECU Production Tester Logs/<device>/programming_0001.csv
+```
+
+Subsequent programming attempts for the same MCU are saved as:
+
+```text
+programming_0002.csv
+programming_0003.csv
+...
+```
+
+The programming `<device>` folder uses the STM32F767 96-bit unique device ID read from address `0x1FF0F420` before flashing. If the ID cannot be read, no programming log is written because the target is probably not connected correctly.
 
 Each completed test is saved automatically as a CSV file under:
 
@@ -190,6 +207,7 @@ The macOS sandbox is disabled for this tool because serial device access require
 ```text
 lib/main.dart                               App entry point, theme, and shared library wiring
 lib/initial_programming.dart                STM32CubeProgrammer CLI command building and execution
+lib/programming_log_writer.dart             Programming CSV log persistence and per-device numbering
 lib/ecu_protocol.dart                       ECU request/response protocol, frame parsing, pass/fail rules
 lib/test_log_writer.dart                    CSV log persistence and per-device numbering
 lib/src/serial_transport.dart               Serial port abstractions and libserialport implementation
