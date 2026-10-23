@@ -6,6 +6,7 @@ void main() {
     const request = ProgrammingRequest(
       executablePath: '/Applications/ST/STM32_Programmer_CLI',
       firmwarePath: '/tmp/initial.bin',
+      calibrationPath: '/tmp/calibration.bin',
       interface: DebugInterface.swd,
       flashAddress: '0x08000000',
     );
@@ -18,14 +19,56 @@ void main() {
       '/tmp/initial.bin',
       '0x08000000',
       '-v',
+      '-w',
+      '/tmp/calibration.bin',
+      '0x08100000',
+      '-v',
+      '-w',
+      '/tmp/calibration.bin',
+      '0x08140000',
+      '-v',
       '-rst',
     ]);
+  });
+
+  test('accepts firmware and calibration that fit the flash layout', () {
+    expect(
+      () => Stm32CubeProgrammer.validateFlashLayout(
+        firmwareAddress: 0x08000000,
+        firmwareLength: 0x100000,
+        calibrationLength: 32204,
+      ),
+      returnsNormally,
+    );
+  });
+
+  test('rejects firmware that overlaps the calibration sectors', () {
+    expect(
+      () => Stm32CubeProgrammer.validateFlashLayout(
+        firmwareAddress: 0x08000000,
+        firmwareLength: 0x100001,
+        calibrationLength: 32204,
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('rejects calibration larger than one sector', () {
+    expect(
+      () => Stm32CubeProgrammer.validateFlashLayout(
+        firmwareAddress: 0x08000000,
+        firmwareLength: 0x80000,
+        calibrationLength: calibrationSectorSize + 1,
+      ),
+      throwsFormatException,
+    );
   });
 
   test('builds STM32CubeProgrammer arguments for STM32F767 UID read', () {
     const request = ProgrammingRequest(
       executablePath: '/Applications/ST/STM32_Programmer_CLI',
       firmwarePath: '/tmp/initial.bin',
+      calibrationPath: '/tmp/calibration.bin',
       interface: DebugInterface.swd,
       flashAddress: '0x08000000',
     );

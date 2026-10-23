@@ -15,8 +15,10 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
     text: Stm32CubeProgrammer.defaultExecutablePath(),
   );
   final _firmwarePathController = TextEditingController();
+  final _calibrationPathController = TextEditingController();
   final _flashAddressController = TextEditingController(text: '0x08000000');
   final _programmer = const Stm32CubeProgrammer();
+  final _settingsStore = ProgrammingSettingsStore();
 
   var _debugInterface = DebugInterface.swd;
   var _programming = false;
@@ -30,16 +32,46 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
     super.initState();
     _programmerPathController.addListener(_clearProgrammingResult);
     _firmwarePathController.addListener(_clearProgrammingResult);
+    _calibrationPathController.addListener(_clearProgrammingResult);
     _flashAddressController.addListener(_clearProgrammingResult);
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final settings = await _settingsStore.load();
+    if (!mounted) return;
+    setState(() {
+      if (_firmwarePathController.text.isEmpty) {
+        _firmwarePathController.text = settings.firmwarePath;
+      }
+      if (_calibrationPathController.text.isEmpty) {
+        _calibrationPathController.text = settings.calibrationPath;
+      }
+    });
+  }
+
+  Future<void> _saveSettings() async {
+    try {
+      await _settingsStore.save(
+        ProgrammingSettings(
+          firmwarePath: _firmwarePathController.text.trim(),
+          calibrationPath: _calibrationPathController.text.trim(),
+        ),
+      );
+    } catch (error) {
+      debugPrint('Saving programming settings failed: $error');
+    }
   }
 
   @override
   void dispose() {
     _programmerPathController.removeListener(_clearProgrammingResult);
     _firmwarePathController.removeListener(_clearProgrammingResult);
+    _calibrationPathController.removeListener(_clearProgrammingResult);
     _flashAddressController.removeListener(_clearProgrammingResult);
     _programmerPathController.dispose();
     _firmwarePathController.dispose();
+    _calibrationPathController.dispose();
     _flashAddressController.dispose();
     super.dispose();
   }
@@ -74,6 +106,19 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
     );
     if (file == null || !mounted) return;
     setState(() => _firmwarePathController.text = file.path);
+    await _saveSettings();
+  }
+
+  Future<void> _pickCalibrationPath() async {
+    final file = await openFile(
+      acceptedTypeGroups: [
+        const XTypeGroup(label: 'Calibration binary', extensions: ['bin']),
+        const XTypeGroup(label: 'All files'),
+      ],
+    );
+    if (file == null || !mounted) return;
+    setState(() => _calibrationPathController.text = file.path);
+    await _saveSettings();
   }
 
   Future<void> _programDevice() async {
@@ -85,12 +130,14 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
       _savedLog = null;
       _logError = null;
     });
+    await _saveSettings();
 
     try {
       final result = await _programmer.program(
         ProgrammingRequest(
           executablePath: _programmerPathController.text,
           firmwarePath: _firmwarePathController.text,
+          calibrationPath: _calibrationPathController.text,
           interface: _debugInterface,
           flashAddress: _flashAddressController.text,
         ),
@@ -237,6 +284,15 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
               onBrowse: _programming ? null : _pickFirmwarePath,
             ),
             const SizedBox(height: 14),
+            _PathField(
+              controller: _calibrationPathController,
+              label:
+                  'Default calibration binary (0x08100000 + copy at 0x08140000)',
+              icon: Icons.tune,
+              enabled: !_programming,
+              onBrowse: _programming ? null : _pickCalibrationPath,
+            ),
+            const SizedBox(height: 14),
             LayoutBuilder(
               builder: (context, constraints) {
                 final interfaceSelector = SegmentedButton<DebugInterface>(
@@ -305,7 +361,8 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
               const _ProgrammingNotice(
                 icon: Icons.check_circle_outline,
                 color: Color(0xff087443),
-                text: 'Initial firmware programmed and verified.',
+                text:
+                    'Initial firmware and default calibration programmed and verified.',
               ),
               const SizedBox(height: 12),
             ],

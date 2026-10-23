@@ -181,7 +181,6 @@ String _metricColumnName(EcuMetric metric) {
     EcuMetric.map => 'map_kpa',
     EcuMetric.acceleratorPedal => 'accelerator_pedal_percent',
     EcuMetric.vBatt => 'vbatt_v',
-    EcuMetric.jssState => 'jss_state',
     EcuMetric.iat => 'iat_c',
   };
 }

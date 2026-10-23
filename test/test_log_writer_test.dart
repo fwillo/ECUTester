@@ -23,7 +23,6 @@ void main() {
         mapKpa: 45.6,
         acceleratorPedalPercent: 13.7,
         vBatt: 12,
-        jssStateRaw: 0,
         iatC: 5.5,
       ),
     ]);
@@ -42,12 +41,9 @@ void main() {
     expect(
       csv,
       contains(
-        'frame,rpm,clt_c,map_kpa,accelerator_pedal_percent,vbatt_v,jss_state,iat_c',
+        'frame,rpm,clt_c,map_kpa,accelerator_pedal_percent,vbatt_v,iat_c',
       ),
     );
-    expect(
-      csv,
-      contains('1,1000.0000,66.8000,45.6000,13.7000,12.0000,0.0000,5.5000'),
-    );
+    expect(csv, contains('1,1000.0000,66.8000,45.6000,13.7000,12.0000,5.5000'));
   });
 }

@@ -9,6 +9,7 @@ import 'package:flutter_libserialport/flutter_libserialport.dart';
 import 'ecu_protocol.dart';
 import 'initial_programming.dart';
 import 'programming_log_writer.dart';
+import 'programming_settings.dart';
 import 'test_log_writer.dart';
 
 part 'src/serial_transport.dart';

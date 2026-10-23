@@ -48,7 +48,6 @@ class EcuProtocol {
       acceleratorPedalPercent: data.getInt16(26, Endian.little) * 0.01,
       mapKpa: data.getUint16(34, Endian.little) * (1 / 30),
       vBatt: data.getUint16(40, Endian.little) * 0.001,
-      jssStateRaw: data.getInt8(1396),
     );
   }
 
@@ -106,7 +105,6 @@ class EcuFrame {
     required this.mapKpa,
     required this.acceleratorPedalPercent,
     required this.vBatt,
-    required this.jssStateRaw,
     required this.iatC,
   });
 
@@ -115,7 +113,6 @@ class EcuFrame {
   final double mapKpa;
   final double acceleratorPedalPercent;
   final double vBatt;
-  final int jssStateRaw;
   final double iatC;
 
   double valueFor(EcuMetric metric) {
@@ -125,7 +122,6 @@ class EcuFrame {
       EcuMetric.map => mapKpa,
       EcuMetric.acceleratorPedal => acceleratorPedalPercent,
       EcuMetric.vBatt => vBatt,
-      EcuMetric.jssState => jssStateRaw.toDouble(),
       EcuMetric.iat => iatC,
     };
   }
@@ -137,7 +133,6 @@ class EcuFrame {
       'MAP=${mapKpa.toStringAsFixed(2)} kPa',
       'Pedal=${acceleratorPedalPercent.toStringAsFixed(2)} %',
       'VBatt=${vBatt.toStringAsFixed(3)} V',
-      'JSS=${jssStateRaw.toDouble().toStringAsFixed(2)}',
       'IAT=${iatC.toStringAsFixed(2)} C',
     ].join(', ');
   }
@@ -145,11 +140,10 @@ class EcuFrame {
 
 enum EcuMetric {
   rpm('RPM', 'RPM', 990, 1010, 0),
-  coolant('CLT', 'C', 66.6, 67.0, 1),
-  map('MAP', 'kPa', 45.4, 45.8, 1),
-  acceleratorPedal('Accelerator Pedal', '%', 13.5, 13.9, 1),
+  coolant('CLT', 'C', 65.6, 67.8, 1),
+  map('MAP', 'kPa', 45.0, 45.8, 1),
+  acceleratorPedal('Accelerator Pedal', '%', 12.0, 14.0, 1),
   vBatt('VBatt', 'V', 11, 13, 2, minInclusive: false, maxInclusive: false),
-  jssState('JSS State', '', 0, 0, 2),
   iat('IAT', 'C', 5, 6, 1, minInclusive: false, maxInclusive: false);
 
   const EcuMetric(

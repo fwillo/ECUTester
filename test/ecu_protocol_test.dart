@@ -23,8 +23,7 @@ void main() {
       ..setInt16(18, 550, Endian.little)
       ..setInt16(26, 3500, Endian.little)
       ..setUint16(34, 1800, Endian.little)
-      ..setUint16(40, 12250, Endian.little)
-      ..setInt8(1396, 0);
+      ..setUint16(40, 12250, Endian.little);
 
     final frame = EcuProtocol.parseFrame(payload);
 
@@ -33,11 +32,6 @@ void main() {
     expect(frame.acceleratorPedalPercent, 35);
     expect(frame.mapKpa, 60);
     expect(frame.vBatt, 12.25);
-    expect(frame.jssStateRaw, 0);
-    expect(
-      EcuMetric.jssState.format(frame.valueFor(EcuMetric.jssState)),
-      '0.00',
-    );
     expect(frame.iatC, 5.5);
   });
 
@@ -64,7 +58,6 @@ void main() {
         mapKpa: 45.6,
         acceleratorPedalPercent: 13.7,
         vBatt: 12,
-        jssStateRaw: 0,
         iatC: 5.5,
       ),
     );
@@ -79,7 +72,6 @@ void main() {
         mapKpa: 45.6,
         acceleratorPedalPercent: 13.7,
         vBatt: 12,
-        jssStateRaw: 0,
         iatC: 5.5,
       ),
     );

@@ -2,6 +2,9 @@ import 'dart:io';
 
 const int stm32f767UniqueIdAddress = 0x1FF0F420;
 const int stm32UniqueIdByteLength = 12;
+const int calibrationPrimaryAddress = 0x08100000;
+const int calibrationBackupAddress = 0x08140000;
+const int calibrationSectorSize = 0x40000;
 
 enum DebugInterface {
   swd('SWD'),
@@ -16,12 +19,14 @@ class ProgrammingRequest {
   const ProgrammingRequest({
     required this.executablePath,
     required this.firmwarePath,
+    required this.calibrationPath,
     required this.interface,
     required this.flashAddress,
   });
 
   final String executablePath;
   final String firmwarePath;
+  final String calibrationPath;
   final DebugInterface interface;
   final String flashAddress;
 }
@@ -88,6 +93,7 @@ class Stm32CubeProgrammer {
   Future<ProgrammingResult> program(ProgrammingRequest request) async {
     final executablePath = request.executablePath.trim();
     final firmwarePath = request.firmwarePath.trim();
+    final calibrationPath = request.calibrationPath.trim();
     final flashAddress = request.flashAddress.trim();
 
     if (executablePath.isEmpty) {
@@ -95,6 +101,11 @@ class Stm32CubeProgrammer {
     }
     if (firmwarePath.isEmpty) {
       throw const FormatException('Select the initial firmware binary path.');
+    }
+    if (calibrationPath.isEmpty) {
+      throw const FormatException(
+        'Select the default calibration binary path.',
+      );
     }
     if (flashAddress.isEmpty) {
       throw const FormatException('Enter a flash address.');
@@ -114,6 +125,17 @@ class Stm32CubeProgrammer {
     if (!await firmware.exists()) {
       throw FormatException('Firmware binary not found: $firmwarePath');
     }
+
+    final calibration = File(calibrationPath);
+    if (!await calibration.exists()) {
+      throw FormatException('Calibration binary not found: $calibrationPath');
+    }
+
+    validateFlashLayout(
+      firmwareAddress: int.parse(flashAddress.substring(2), radix: 16),
+      firmwareLength: await firmware.length(),
+      calibrationLength: await calibration.length(),
+    );
 
     final startedAt = DateTime.now();
     final uidReadArguments = buildUniqueIdReadArguments(request);
@@ -165,8 +187,46 @@ class Stm32CubeProgrammer {
       request.firmwarePath.trim(),
       request.flashAddress.trim(),
       '-v',
+      '-w',
+      request.calibrationPath.trim(),
+      _hexAddress(calibrationPrimaryAddress),
+      '-v',
+      '-w',
+      request.calibrationPath.trim(),
+      _hexAddress(calibrationBackupAddress),
+      '-v',
       '-rst',
     ];
+  }
+
+  static void validateFlashLayout({
+    required int firmwareAddress,
+    required int firmwareLength,
+    required int calibrationLength,
+  }) {
+    if (firmwareLength == 0) {
+      throw const FormatException('Firmware binary is empty.');
+    }
+    if (calibrationLength == 0) {
+      throw const FormatException('Calibration binary is empty.');
+    }
+    if (calibrationLength > calibrationSectorSize) {
+      throw FormatException(
+        'Calibration binary is $calibrationLength bytes, but a calibration '
+        'sector holds only $calibrationSectorSize bytes.',
+      );
+    }
+
+    final firmwareEnd = firmwareAddress + firmwareLength;
+    final calibrationEnd = calibrationBackupAddress + calibrationSectorSize;
+    if (firmwareAddress < calibrationEnd &&
+        firmwareEnd > calibrationPrimaryAddress) {
+      throw FormatException(
+        'Firmware ${_hexAddress(firmwareAddress)}-${_hexAddress(firmwareEnd - 1)} '
+        'overlaps the calibration sectors '
+        '${_hexAddress(calibrationPrimaryAddress)}-${_hexAddress(calibrationEnd - 1)}.',
+      );
+    }
   }
 
   static List<String> buildUniqueIdReadArguments(ProgrammingRequest request) {
@@ -175,7 +235,7 @@ class Stm32CubeProgrammer {
       'port=${request.interface.cliValue}',
       'mode=UR',
       '-r32',
-      '0x${stm32f767UniqueIdAddress.toRadixString(16).toUpperCase()}',
+      _hexAddress(stm32f767UniqueIdAddress),
       stm32UniqueIdByteLength.toString(),
     ];
   }
@@ -228,6 +288,10 @@ String? extractUniqueIdFromCubeProgrammerOutput(String output) {
   }
 
   return null;
+}
+
+String _hexAddress(int address) {
+  return '0x${address.toRadixString(16).toUpperCase().padLeft(8, '0')}';
 }
 
 String _shellQuote(String value) {

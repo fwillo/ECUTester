@@ -346,7 +346,6 @@ class MetricTile extends StatelessWidget {
       EcuMetric.map => Icons.compress,
       EcuMetric.acceleratorPedal => Icons.pedal_bike,
       EcuMetric.vBatt => Icons.battery_charging_full,
-      EcuMetric.jssState => Icons.arrow_upward,
       EcuMetric.iat => Icons.air,
     };
   }

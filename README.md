@@ -1,6 +1,6 @@
 # BremerECU Production Tester
 
-BremerECU Production Tester is a Flutter desktop application for initial PCBA programming and final production testing. It first guides the operator through TC2030 JTAG/SWD connection and flashes the initial firmware with STM32CubeProgrammer CLI. It then connects to a BremerECU-compatible board over UART, samples selected ECU output channels, shows live measurements during collection, and produces a clear PASS or FAIL result for the operator.
+BremerECU Production Tester is a Flutter desktop application for initial PCBA programming and final production testing. It first guides the operator through TC2030 JTAG/SWD connection and flashes the initial firmware and default calibration with STM32CubeProgrammer CLI. It then connects to a BremerECU-compatible board over UART, samples selected ECU output channels, shows live measurements during collection, and produces a clear PASS or FAIL result for the operator.
 
 The tool is designed for a production bench: program the bare board, select the detected tester UART, watch live values while the sample set is collected, and record the result with a numbered CSV log for traceability.
 
@@ -8,9 +8,10 @@ The tool is designed for a production bench: program the bare board, select the 
 
 - Lists only the intended USB serial device: VID `0483`, PID `5740`.
 - Shows the TC2030 connection graphic before programming.
-- Lets the operator select the `STM32_Programmer_CLI` executable, firmware binary, debug interface, and flash address.
+- Lets the operator select the `STM32_Programmer_CLI` executable, firmware binary, default calibration binary, debug interface, and flash address.
 - Reads the STM32F767 96-bit unique device ID over SWD/JTAG before programming.
-- Programs via STM32CubeProgrammer CLI with verify and reset.
+- Programs via STM32CubeProgrammer CLI in one session: firmware, then the default calibration to `0x08100000` (sector 8) and a backup copy to `0x08140000` (sector 9), each verified, followed by a reset.
+- Rejects a calibration larger than one 256 KB sector, or firmware that would overlap the calibration sectors.
 - Connects at `115200 8N1`.
 - Requests ECU output-channel data on a 10 Hz schedule, limited by UART response time.
 - Collects `100` frames per test.
@@ -20,7 +21,6 @@ The tool is designed for a production bench: program the bare board, select the 
   - MAP
   - Accelerator Pedal
   - VBatt
-  - JSS State
   - IAT
 - Validates averages against configured production limits.
 - Displays a high-visibility PASS/FAIL result screen.
@@ -34,11 +34,10 @@ The current pass criteria are configured in [lib/ecu_protocol.dart](lib/ecu_prot
 | Metric | Passing average range |
 | --- | ---: |
 | RPM | `>= 990 and <= 1010 RPM` |
-| CLT | `>= 66.6 and <= 67.0 C` |
-| MAP | `>= 45.4 and <= 45.8 kPa` |
-| Accelerator Pedal | `>= 13.5 and <= 13.9 %` |
+| CLT | `>= 66.6 and <= 67.8 C` |
+| MAP | `>= 45.0 and <= 45.8 kPa` |
+| Accelerator Pedal | `>= 12.0 and <= 14.0 %` |
 | VBatt | `> 11.00 and < 13.00 V` |
-| JSS State | `>= 0.00 and <= 0.00` |
 | IAT | `> 5.0 and < 6.0 C` |
 
 A test passes only when all metric averages are inside their configured ranges.
@@ -48,7 +47,7 @@ A test passes only when all metric averages are inside their configured ranges.
 1. Connect the TC2030 cable to the bare board as shown in the application.
 2. Start the application.
 3. Select the STM32CubeProgrammer CLI executable if the default path is not correct.
-4. Select the initial firmware `.bin` file.
+4. Select the initial firmware `.bin` file and the default calibration `.bin` file. Both paths are remembered for the next start (`~/Library/Application Support/BremerECU Production Tester/settings.json` on macOS).
 5. Confirm the debug interface and flash address, then run programming. The app reads the STM32F767 unique ID before flashing and aborts if the ID cannot be read.
 6. For an already programmed board, use **Test Already Programmed** to skip flashing.
 7. After programming succeeds, or after skipping programming, connect the PCBA/tester UART and continue to the UART test.
@@ -107,7 +106,7 @@ The log-writing code lives in [lib/test_log_writer.dart](lib/test_log_writer.dar
 
 ## Serial Protocol
 
-The app sends the ECU output-channel request command `O` with offset `0` and length `1397`. This intentionally uses one larger continuous request so the high-offset `jssState` output channel can be read in the same frame as the other metrics.
+The app sends the ECU output-channel request command `O` with offset `0` and length `1397`.
 
 Request format:
 
