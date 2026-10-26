@@ -65,6 +65,11 @@ class LibSerialPortService implements SerialService {
   Future<List<SerialPortInfo>> listPorts() async {
     final ports = SerialPort.availablePorts;
     return ports
+        // On macOS, querying USB info of non-USB ports (Bluetooth,
+        // debug-console) throws a SerialPortError with a stale errno.
+        .where(
+          (name) => !Platform.isMacOS || name.startsWith('/dev/cu.usbmodem'),
+        )
         .map(_readPortInfo)
         .where(
           (port) =>
