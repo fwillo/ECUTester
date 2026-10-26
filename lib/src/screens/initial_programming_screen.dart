@@ -169,7 +169,7 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
   }
 
   void _continueToTesting() {
-    Navigator.of(context).pushReplacement(
+    Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) =>
             UartSelectionScreen(serialService: widget.serialService),
