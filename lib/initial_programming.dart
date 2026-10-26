@@ -242,7 +242,7 @@ class Stm32CubeProgrammer {
 
   static String defaultExecutablePath() {
     if (Platform.isMacOS) {
-      return '/Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/MacOs/bin/STM32_Programmer_CLI';
+      return '/Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/Resources/bin/STM32_Programmer_CLI';
     }
     if (Platform.isWindows) {
       return r'C:\Program Files\STMicroelectronics\STM32Cube\STM32CubeProgrammer\bin\STM32_Programmer_CLI.exe';
