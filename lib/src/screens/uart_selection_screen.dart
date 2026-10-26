@@ -13,6 +13,7 @@ class _UartSelectionScreenState extends State<UartSelectionScreen> {
   var _ports = <SerialPortInfo>[];
   var _loading = true;
   var _connectingPort = '';
+  var _infiniteRun = false;
   String? _error;
 
   @override
@@ -55,6 +56,7 @@ class _UartSelectionScreenState extends State<UartSelectionScreen> {
             serialService: widget.serialService,
             port: port,
             connection: connection,
+            infinite: _infiniteRun,
           ),
         ),
       );
@@ -92,13 +94,37 @@ class _UartSelectionScreenState extends State<UartSelectionScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'UART Selection',
-                    style: Theme.of(context).textTheme.headlineMedium,
+                  Row(
+                    children: [
+                      Text(
+                        'UART Selection',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(width: 24),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(6),
+                        onTap: () =>
+                            setState(() => _infiniteRun = !_infiniteRun),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Checkbox(
+                              value: _infiniteRun,
+                              onChanged: (value) =>
+                                  setState(() => _infiniteRun = value ?? false),
+                            ),
+                            const Text('Infinite run'),
+                            const SizedBox(width: 8),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '115200 8N1 | 10 Hz sampling | $ecuFrameTarget-frame livedata test before final assembly',
+                    _infiniteRun
+                        ? '115200 8N1 | 10 Hz sampling | continuous livedata without averaging or result'
+                        : '115200 8N1 | 10 Hz sampling | $ecuFrameTarget-frame livedata test before final assembly',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 24),

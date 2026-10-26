@@ -33,11 +33,13 @@ class _StatusStrip extends StatelessWidget {
     required this.frames,
     required this.portName,
     required this.error,
+    this.infinite = false,
   });
 
   final int frames;
   final String portName;
   final String? error;
+  final bool infinite;
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +73,7 @@ class _StatusStrip extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            Text('$frames / $ecuFrameTarget'),
+            Text(infinite ? '$frames' : '$frames / $ecuFrameTarget'),
           ],
         ),
       ),

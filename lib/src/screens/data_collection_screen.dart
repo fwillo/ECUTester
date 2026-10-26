@@ -6,11 +6,15 @@ class DataCollectionScreen extends StatefulWidget {
     required this.serialService,
     required this.port,
     required this.connection,
+    this.infinite = false,
   });
 
   final SerialService serialService;
   final SerialPortInfo port;
   final EcuSerialConnection connection;
+
+  /// Shows live values until the operator leaves, without averaging or result.
+  final bool infinite;
 
   @override
   State<DataCollectionScreen> createState() => _DataCollectionScreenState();
@@ -21,6 +25,7 @@ class _DataCollectionScreenState extends State<DataCollectionScreen> {
   final _frames = <EcuFrame>[];
   Timer? _timer;
   EcuFrame? _latestFrame;
+  var _frameCount = 0;
   String? _error;
   final _startedAt = DateTime.now();
   var _completed = false;
@@ -66,7 +71,7 @@ class _DataCollectionScreenState extends State<DataCollectionScreen> {
   void _handleBytes(Uint8List data) {
     _rxBuffer.addAll(data);
 
-    while (_frames.length < ecuFrameTarget) {
+    while (widget.infinite || _frames.length < ecuFrameTarget) {
       final payload = _takePayload();
       if (payload == null) break;
 
@@ -74,7 +79,9 @@ class _DataCollectionScreenState extends State<DataCollectionScreen> {
         final frame = EcuProtocol.parseFrame(payload);
         setState(() {
           _latestFrame = frame;
-          _frames.add(frame);
+          _frameCount++;
+          // Infinite runs keep only the latest frame, so memory stays bounded.
+          if (!widget.infinite) _frames.add(frame);
           _error = null;
         });
       } catch (error) {
@@ -82,7 +89,7 @@ class _DataCollectionScreenState extends State<DataCollectionScreen> {
       }
     }
 
-    if (_frames.length >= ecuFrameTarget && !_completed) {
+    if (!widget.infinite && _frames.length >= ecuFrameTarget && !_completed) {
       _completed = true;
       _timer?.cancel();
       unawaited(_showResult());
@@ -166,9 +173,10 @@ class _DataCollectionScreenState extends State<DataCollectionScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _StatusStrip(
-                          frames: _frames.length,
+                          frames: _frameCount,
                           portName: widget.port.name,
                           error: _error,
+                          infinite: widget.infinite,
                         ),
                         const SizedBox(height: 18),
                         Expanded(
@@ -202,6 +210,7 @@ class _DataCollectionScreenState extends State<DataCollectionScreen> {
                                     metric: metric,
                                     latest: _latestFrame?.valueFor(metric),
                                     average: _averageFor(metric),
+                                    showAverage: !widget.infinite,
                                   );
                                 },
                               );
@@ -234,16 +243,22 @@ class _DataCollectionScreenState extends State<DataCollectionScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Frame collection',
+                            widget.infinite
+                                ? 'Infinite run'
+                                : 'Frame collection',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
-                          Text('${_frames.length} / $ecuFrameTarget frames'),
+                          Text(
+                            widget.infinite
+                                ? '$_frameCount frames'
+                                : '${_frames.length} / $ecuFrameTarget frames',
+                          ),
                         ],
                       ),
                       const SizedBox(height: 10),
                       LinearProgressIndicator(
                         minHeight: 10,
-                        value: progress.clamp(0, 1),
+                        value: widget.infinite ? null : progress.clamp(0, 1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                     ],
@@ -273,17 +288,20 @@ class MetricTile extends StatelessWidget {
     required this.metric,
     required this.latest,
     required this.average,
+    this.showAverage = true,
   });
 
   final EcuMetric metric;
   final double? latest;
   final double? average;
+  final bool showAverage;
 
   @override
   Widget build(BuildContext context) {
     final latestText = latest == null ? '--' : metric.format(latest!);
     final averageText = average == null ? '--' : metric.format(average!);
-    final inRange = average == null || metric.isPassing(average!);
+    final judged = showAverage ? average : latest;
+    final inRange = judged == null || metric.isPassing(judged);
     final color = inRange ? const Color(0xff2f6f5e) : const Color(0xffb42318);
 
     return Card(
@@ -325,7 +343,7 @@ class MetricTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text('Average $averageText'),
+                if (showAverage) Text('Average $averageText'),
                 const SizedBox(height: 4),
                 Text(
                   'Target ${metric.rangeLabel}',
