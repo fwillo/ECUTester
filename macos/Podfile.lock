@@ -20,7 +20,7 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral
 
 SPEC CHECKSUMS:
-  flutter_libserialport: 2c523cb8d8203fc6d1b0da88190da31ac970eb93
+  flutter_libserialport: d1a505fd4b05785f7b50cc7c93b361937ea1c5bd
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   libserialport: 1cb25e66ef3c92a8e59c2ea3820302c3fa2268cd
 

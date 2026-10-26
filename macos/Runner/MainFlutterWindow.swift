@@ -4,13 +4,8 @@ import FlutterMacOS
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
-    let screenFrame = NSScreen.main?.visibleFrame ?? self.frame
-    let windowSize = NSSize(width: 1280, height: 700)
-    let windowOrigin = NSPoint(
-      x: screenFrame.midX - windowSize.width / 2,
-      y: screenFrame.midY - windowSize.height / 2
-    )
-    let windowFrame = NSRect(origin: windowOrigin, size: windowSize)
+    // Start maximized: fill the screen area left free by menu bar and Dock.
+    let windowFrame = NSScreen.main?.visibleFrame ?? self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
 
