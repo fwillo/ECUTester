@@ -63,20 +63,37 @@ class SerialPortInfo {
 class LibSerialPortService implements SerialService {
   @override
   Future<List<SerialPortInfo>> listPorts() async {
+    if (Platform.isWindows) {
+      // libserialport resolves VID/PID on Windows by walking the USB hub
+      // tree, which is unreliable for composite devices (COM port on
+      // interface MI_01). Ask Windows for the present devices instead.
+      final portNames = await _findWindowsPortsByUsbId(
+        targetUsbVendorId,
+        targetUsbProductId,
+      );
+      _logSerial(
+        'Available ports: ${SerialPort.availablePorts.join(', ')}; '
+        'matching VID/PID: ${portNames.join(', ')}',
+      );
+      return portNames
+          .map(
+            (name) => _readPortInfo(
+              name,
+              knownIds: (targetUsbVendorId, targetUsbProductId),
+            ),
+          )
+          .whereType<SerialPortInfo>()
+          .toList();
+    }
+
     final ports = SerialPort.availablePorts;
-    // libserialport often fails to resolve VID/PID on Windows for composite
-    // USB devices (e.g. COM port on interface MI_01), so fall back to the
-    // registry, which is what Device Manager shows.
-    final windowsUsbIds = Platform.isWindows
-        ? await _readWindowsUsbIds()
-        : const <String, (int, int)>{};
     return ports
         // On macOS, querying USB info of non-USB ports (Bluetooth,
         // debug-console) throws a SerialPortError with a stale errno.
         .where(
           (name) => !Platform.isMacOS || name.startsWith('/dev/cu.usbmodem'),
         )
-        .map((name) => _readPortInfo(name, windowsUsbIds[name.toUpperCase()]))
+        .map(_readPortInfo)
         .whereType<SerialPortInfo>()
         .where(
           (port) =>
@@ -86,7 +103,7 @@ class LibSerialPortService implements SerialService {
         .toList();
   }
 
-  SerialPortInfo? _readPortInfo(String portName, (int, int)? fallbackIds) {
+  SerialPortInfo? _readPortInfo(String portName, {(int, int)? knownIds}) {
     final port = SerialPort(portName);
     try {
       return SerialPortInfo(
@@ -95,56 +112,57 @@ class LibSerialPortService implements SerialService {
         manufacturer: port.manufacturer,
         productName: port.productName,
         serialNumber: port.serialNumber,
-        vendorId: port.vendorId ?? fallbackIds?.$1,
-        productId: port.productId ?? fallbackIds?.$2,
+        vendorId: knownIds?.$1 ?? port.vendorId,
+        productId: knownIds?.$2 ?? port.productId,
       );
     } on SerialPortError catch (error) {
-      _logSerial('Skipping $portName: ${error.message}');
-      return null;
+      _logSerial('Unable to read details of $portName: ${error.message}');
+      if (knownIds == null) return null;
+      return SerialPortInfo(
+        name: portName,
+        vendorId: knownIds.$1,
+        productId: knownIds.$2,
+      );
     } finally {
       port.dispose();
     }
   }
 
-  /// Maps COM port names (upper case) to USB (VID, PID) using the
-  /// `PortName` values under `HKLM\SYSTEM\CurrentControlSet\Enum\USB`.
-  Future<Map<String, (int, int)>> _readWindowsUsbIds() async {
-    final ids = <String, (int, int)>{};
+  /// Returns the COM port names of all currently present USB devices with
+  /// the given VID/PID, as listed in Device Manager.
+  Future<List<String>> _findWindowsPortsByUsbId(int vid, int pid) async {
+    String hex(int value) =>
+        value.toRadixString(16).padLeft(4, '0').toUpperCase();
+    // Win32_PnPEntity only contains present devices; the COM port name is
+    // stored in the device's "Device Parameters" registry key.
+    final script =
+        r"$ErrorActionPreference = 'SilentlyContinue'; "
+        r'Get-CimInstance Win32_PnPEntity -Filter '
+        '"PNPDeviceID LIKE \'USB\\\\VID_${hex(vid)}&PID_${hex(pid)}%\'" | '
+        r'ForEach-Object { (Get-ItemProperty '
+        r'"HKLM:\SYSTEM\CurrentControlSet\Enum\$($_.PNPDeviceID)\Device Parameters"'
+        r').PortName }';
     try {
-      final result = await Process.run('reg', [
-        'query',
-        r'HKLM\SYSTEM\CurrentControlSet\Enum\USB',
-        '/s',
-        '/v',
-        'PortName',
+      final result = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        script,
       ]);
-      if (result.exitCode != 0) return ids;
-      final keyPattern = RegExp(
-        r'VID_([0-9A-F]{4})&PID_([0-9A-F]{4})',
-        caseSensitive: false,
-      );
-      final valuePattern = RegExp(r'^\s+PortName\s+REG_SZ\s+(\S+)');
-      (int, int)? currentIds;
-      for (final line in (result.stdout as String).split(RegExp(r'\r?\n'))) {
-        if (line.startsWith('HKEY_')) {
-          final match = keyPattern.firstMatch(line);
-          currentIds = match == null
-              ? null
-              : (
-                  int.parse(match.group(1)!, radix: 16),
-                  int.parse(match.group(2)!, radix: 16),
-                );
-          continue;
-        }
-        final value = valuePattern.firstMatch(line);
-        if (value != null && currentIds != null) {
-          ids[value.group(1)!.toUpperCase()] = currentIds;
-        }
+      if (result.exitCode != 0) {
+        _logSerial('Device query failed: ${result.stderr}');
       }
+      return (result.stdout as String)
+          .split(RegExp(r'\r?\n'))
+          .map((line) => line.trim())
+          .where((line) => line.toUpperCase().startsWith('COM'))
+          .toSet()
+          .toList()
+        ..sort();
     } on ProcessException catch (error) {
-      _logSerial('Unable to query registry for USB IDs: ${error.message}');
+      _logSerial('Unable to query devices: ${error.message}');
+      return const [];
     }
-    return ids;
   }
 
   @override
