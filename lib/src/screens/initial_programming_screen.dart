@@ -363,37 +363,6 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
               },
             ),
             const SizedBox(height: 16),
-            if (_error != null) ...[
-              _ProgrammingNotice(
-                icon: Icons.error_outline,
-                color: const Color(0xffb42318),
-                text: _error!,
-              ),
-              const SizedBox(height: 12),
-            ] else if (programmed) ...[
-              const _ProgrammingNotice(
-                icon: Icons.check_circle_outline,
-                color: Color(0xff087443),
-                text:
-                    'Initial firmware and default calibration programmed and verified.',
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (_savedLog != null) ...[
-              _ProgrammingNotice(
-                icon: Icons.description_outlined,
-                color: const Color(0xff2f6f5e),
-                text: 'Programming log saved: ${_savedLog!.file.path}',
-              ),
-              const SizedBox(height: 12),
-            ] else if (_logError != null) ...[
-              _ProgrammingNotice(
-                icon: Icons.warning_amber,
-                color: const Color(0xffb54708),
-                text: 'Programming log save failed: $_logError',
-              ),
-              const SizedBox(height: 12),
-            ],
             LayoutBuilder(
               builder: (context, constraints) {
                 final programButton = FilledButton.icon(
@@ -436,6 +405,37 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                 );
               },
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              _ProgrammingNotice(
+                icon: Icons.error_outline,
+                color: const Color(0xffb42318),
+                text: _error!,
+              ),
+            ] else if (programmed) ...[
+              const SizedBox(height: 12),
+              const _ProgrammingNotice(
+                icon: Icons.check_circle_outline,
+                color: Color(0xff087443),
+                text:
+                    'Initial firmware and default calibration programmed and verified.',
+              ),
+            ],
+            if (_savedLog != null) ...[
+              const SizedBox(height: 12),
+              _ProgrammingNotice(
+                icon: Icons.description_outlined,
+                color: const Color(0xff2f6f5e),
+                text: 'Programming log saved: ${_savedLog!.file.path}',
+              ),
+            ] else if (_logError != null) ...[
+              const SizedBox(height: 12),
+              _ProgrammingNotice(
+                icon: Icons.warning_amber,
+                color: const Color(0xffb54708),
+                text: 'Programming log save failed: $_logError',
+              ),
+            ],
           ],
         ),
       ),
