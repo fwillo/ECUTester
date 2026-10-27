@@ -206,19 +206,28 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final wide = constraints.maxWidth >= 920;
-                        final imagePanel = _ConnectionImagePanel(
-                          height: wide ? double.infinity : 300,
-                        );
+                        const imagePanel = _ConnectionImagePanel();
                         final programmingPanel = _buildProgrammingPanel(
                           context,
                           programmed: programmed,
                         );
+                        final output = _ProgramOutput(result: _lastResult);
 
                         if (wide) {
                           return Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Expanded(child: imagePanel),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    imagePanel,
+                                    const SizedBox(height: 18),
+                                    Expanded(child: output),
+                                  ],
+                                ),
+                              ),
                               const SizedBox(width: 18),
                               Expanded(child: programmingPanel),
                             ],
@@ -229,7 +238,9 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                           children: [
                             imagePanel,
                             const SizedBox(height: 18),
-                            SizedBox(height: 680, child: programmingPanel),
+                            SizedBox(height: 320, child: output),
+                            const SizedBox(height: 18),
+                            programmingPanel,
                           ],
                         );
                       },
@@ -250,7 +261,9 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
   }) {
     return Card(
       clipBehavior: Clip.hardEdge,
-      child: Padding(
+      // No bottom margin so the card ends level with the command output.
+      margin: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -423,8 +436,6 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                 );
               },
             ),
-            const SizedBox(height: 16),
-            Expanded(child: _ProgramOutput(result: _lastResult)),
           ],
         ),
       ),
@@ -433,59 +444,52 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
 }
 
 class _ConnectionImagePanel extends StatelessWidget {
-  const _ConnectionImagePanel({required this.height});
-
-  final double height;
+  const _ConnectionImagePanel();
 
   @override
   Widget build(BuildContext context) {
     return Card(
       clipBehavior: Clip.hardEdge,
-      child: SizedBox(
-        height: height,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.cable,
-                    color: Theme.of(context).colorScheme.primary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                Icon(Icons.cable, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Connect TC2030 to the bare board',
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Connect TC2030 to the bare board',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Expanded(
-              child: ColoredBox(
-                color: const Color(0xffeef2ee),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
+          ),
+          ColoredBox(
+            color: const Color(0xffeef2ee),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Center(
+                child: FractionallySizedBox(
+                  widthFactor: 0.8,
                   child: Image.asset(
                     'TCAnschliessen.png',
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
-                      return Center(
-                        child: Text(
-                          'TCAnschliessen.png could not be loaded.',
-                          style: Theme.of(context).textTheme.bodyLarge,
-                        ),
+                      return Text(
+                        'TCAnschliessen.png could not be loaded.',
+                        style: Theme.of(context).textTheme.bodyLarge,
                       );
                     },
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
