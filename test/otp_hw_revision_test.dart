@@ -104,7 +104,8 @@ void main() {
 
   test('validates the HW revision string', () {
     expect(validateHwRevision('Rev 1.14'), isNull);
-    expect(validateHwRevision(''), isNotNull);
+    expect(validateHwRevision(''), contains('Rev 1.14'));
+    expect(validateHwRevision('   '), contains('Rev 1.14'));
     expect(validateHwRevision('x' * 17), isNotNull);
     expect(validateHwRevision('Rev ä'), isNotNull);
   });

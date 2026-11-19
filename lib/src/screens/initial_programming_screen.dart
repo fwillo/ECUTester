@@ -17,7 +17,7 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
   final _firmwarePathController = TextEditingController();
   final _calibrationPathController = TextEditingController();
   final _flashAddressController = TextEditingController(text: '0x08000000');
-  final _hwRevisionController = TextEditingController(text: 'Rev 1.14');
+  final _hwRevisionController = TextEditingController();
   final _programmer = const Stm32CubeProgrammer();
   final _settingsStore = ProgrammingSettingsStore();
 

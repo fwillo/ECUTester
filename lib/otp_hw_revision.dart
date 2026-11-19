@@ -39,8 +39,13 @@ typedef ProcessRunner =
 
 /// Returns an error message, or null if [revision] can be written to OTP.
 String? validateHwRevision(String revision) {
-  if (revision.isEmpty || revision.length > otpRevisionSize) {
-    return 'HW revision string must be 1 to $otpRevisionSize characters.';
+  if (revision.trim().isEmpty) {
+    return 'Enter a HW revision string, for example "Rev 1.14", or tick '
+        '"Skip HW revision OTP write".';
+  }
+  if (revision.length > otpRevisionSize) {
+    return 'HW revision string must be at most $otpRevisionSize characters, '
+        'for example "Rev 1.14".';
   }
   if (!revision.codeUnits.every(_isPrintableAscii)) {
     return 'HW revision string may only contain printable ASCII characters.';
