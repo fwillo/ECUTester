@@ -92,6 +92,7 @@ class ProgrammingLogWriter {
 
 String _otpResultText(ProgrammingResult result) {
   if (!result.flashSucceeded) return 'SKIPPED';
+  if (result.hwRevisionSkipped) return 'SKIPPED: disabled by the user';
   if (result.otpError != null) return 'FAIL: ${result.otpError}';
   return 'PASS: ${result.otpResult?.summary ?? ''}';
 }

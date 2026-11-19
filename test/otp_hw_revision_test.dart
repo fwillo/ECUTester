@@ -65,7 +65,11 @@ class _FakeCli {
   /// Drops one bit of every data block write, like a bad OTP cell.
   bool corruptWrites = false;
 
-  Future<ProcessResult> call(String executable, List<String> args) async {
+  Future<ProcessResult> call(
+    String executable,
+    List<String> args, [
+    OutputCallback? onOutput,
+  ]) async {
     commands.add(args);
     final u = args.indexOf('-u');
     if (u >= 0) {

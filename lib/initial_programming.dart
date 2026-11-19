@@ -25,6 +25,7 @@ class ProgrammingRequest {
     required this.interface,
     required this.flashAddress,
     required this.hwRevision,
+    this.skipHwRevision = false,
   });
 
   final String executablePath;
@@ -35,6 +36,9 @@ class ProgrammingRequest {
 
   /// Written to the first free OTP block after programming and verification.
   final String hwRevision;
+
+  /// Skips the OTP write entirely (no validation, nothing written).
+  final bool skipHwRevision;
 }
 
 class ProgrammingResult {
@@ -51,6 +55,7 @@ class ProgrammingResult {
     required this.stdout,
     required this.stderr,
     this.hwRevision = '',
+    this.hwRevisionSkipped = false,
     this.otpTranscript = '',
     this.otpResult,
     this.otpError,
@@ -68,6 +73,7 @@ class ProgrammingResult {
   final String stdout;
   final String stderr;
   final String hwRevision;
+  final bool hwRevisionSkipped;
   final String otpTranscript;
   final OtpWriteResult? otpResult;
   final String? otpError;
@@ -105,7 +111,14 @@ class UniqueIdReadException implements Exception {
 class Stm32CubeProgrammer {
   const Stm32CubeProgrammer();
 
-  Future<ProgrammingResult> program(ProgrammingRequest request) async {
+  /// Runs UID read, programming and the OTP step. CLI output is forwarded
+  /// to [onOutput] while the commands run.
+  Future<ProgrammingResult> program(
+    ProgrammingRequest request, {
+    OutputCallback? onOutput,
+  }) async {
+    void emit(String text) => onOutput?.call(text);
+
     final executablePath = request.executablePath.trim();
     final firmwarePath = request.firmwarePath.trim();
     final calibrationPath = request.calibrationPath.trim();
@@ -128,7 +141,9 @@ class Stm32CubeProgrammer {
     if (!RegExp(r'^0x[0-9A-Fa-f]+$').hasMatch(flashAddress)) {
       throw const FormatException('Flash address must look like 0x08000000.');
     }
-    final hwRevisionError = validateHwRevision(request.hwRevision);
+    final hwRevisionError = request.skipHwRevision
+        ? null
+        : validateHwRevision(request.hwRevision);
     if (hwRevisionError != null) {
       throw FormatException(hwRevisionError);
     }
@@ -158,9 +173,12 @@ class Stm32CubeProgrammer {
 
     final startedAt = DateTime.now();
     final uidReadArguments = buildUniqueIdReadArguments(request);
-    final uidReadProcessResult = await Process.run(
+    final uidReadCommandLine = formatCommand(executablePath, uidReadArguments);
+    emit('$uidReadCommandLine\n\n');
+    final uidReadProcessResult = await runStreamingProcess(
       executablePath,
       uidReadArguments,
+      onOutput,
     );
     final uidReadStdout = stripAnsiEscapeCodes(
       uidReadProcessResult.stdout.toString(),
@@ -168,7 +186,6 @@ class Stm32CubeProgrammer {
     final uidReadStderr = stripAnsiEscapeCodes(
       uidReadProcessResult.stderr.toString(),
     );
-    final uidReadCommandLine = formatCommand(executablePath, uidReadArguments);
     final deviceId = extractUniqueIdFromCubeProgrammerOutput(uidReadStdout);
     if (uidReadProcessResult.exitCode != 0 || deviceId == null) {
       throw UniqueIdReadException(
@@ -179,23 +196,36 @@ class Stm32CubeProgrammer {
       );
     }
 
+    emit('\nDevice ID: $deviceId\n\n');
+
     final arguments = buildArguments(request);
-    final result = await Process.run(executablePath, arguments);
+    final commandLine = formatCommand(executablePath, arguments);
+    emit('$commandLine\n\n');
+    final result = await runStreamingProcess(
+      executablePath,
+      arguments,
+      onOutput,
+    );
 
     // Only after programming and verification succeeded: write the hardware
     // revision to OTP.
     OtpWriteResult? otpResult;
     String? otpError;
     var otpTranscript = '';
-    if (result.exitCode == 0) {
+    if (result.exitCode == 0 && request.skipHwRevision) {
+      emit('\n--- HW revision OTP ---\n\nSkipped: disabled by the user.\n');
+    } else if (result.exitCode == 0) {
+      emit('\n--- HW revision OTP ---\n\n');
       final otp = OtpProgrammer(
         executablePath: executablePath,
         interface: request.interface,
+        onOutput: onOutput,
       );
       try {
         otpResult = await otp.programHwRevision(request.hwRevision);
       } catch (error) {
         otpError = error.toString();
+        emit('\nOTP error: $otpError\n');
       }
       otpTranscript = otp.transcript;
     }
@@ -208,11 +238,12 @@ class Stm32CubeProgrammer {
       uidReadExitCode: uidReadProcessResult.exitCode,
       uidReadStdout: uidReadStdout,
       uidReadStderr: uidReadStderr,
-      commandLine: formatCommand(executablePath, arguments),
+      commandLine: commandLine,
       exitCode: result.exitCode,
       stdout: stripAnsiEscapeCodes(result.stdout.toString()),
       stderr: stripAnsiEscapeCodes(result.stderr.toString()),
-      hwRevision: request.hwRevision,
+      hwRevision: request.skipHwRevision ? '' : request.hwRevision,
+      hwRevisionSkipped: request.skipHwRevision,
       otpTranscript: otpTranscript,
       otpResult: otpResult,
       otpError: otpError,
@@ -299,8 +330,81 @@ class Stm32CubeProgrammer {
   }
 }
 
+final _ansiEscape = RegExp(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])');
+
 String stripAnsiEscapeCodes(String value) {
-  return value.replaceAll(RegExp(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])'), '');
+  return value.replaceAll(_ansiEscape, '');
+}
+
+typedef OutputCallback = void Function(String text);
+
+/// Like [Process.run], but forwards stdout and stderr to [onOutput] while
+/// the process runs (with ANSI escape codes removed).
+Future<ProcessResult> runStreamingProcess(
+  String executable,
+  List<String> arguments, [
+  OutputCallback? onOutput,
+]) async {
+  final process = await Process.start(executable, arguments);
+  final stdoutBuffer = StringBuffer();
+  final stderrBuffer = StringBuffer();
+  final stdoutChunker = _AnsiChunker();
+  final stderrChunker = _AnsiChunker();
+
+  void forward(String text) {
+    if (text.isNotEmpty) onOutput?.call(text);
+  }
+
+  final stdoutDone = process.stdout.transform(systemEncoding.decoder).forEach((
+    chunk,
+  ) {
+    stdoutBuffer.write(chunk);
+    forward(stdoutChunker.add(chunk));
+  });
+  final stderrDone = process.stderr.transform(systemEncoding.decoder).forEach((
+    chunk,
+  ) {
+    stderrBuffer.write(chunk);
+    forward(stderrChunker.add(chunk));
+  });
+
+  final exitCode = await process.exitCode;
+  await Future.wait([stdoutDone, stderrDone]);
+  forward(stdoutChunker.flush());
+  forward(stderrChunker.flush());
+
+  return ProcessResult(
+    process.pid,
+    exitCode,
+    stdoutBuffer.toString(),
+    stderrBuffer.toString(),
+  );
+}
+
+/// Strips ANSI escape codes from a chunked stream, holding back an escape
+/// sequence that is split across two chunks.
+class _AnsiChunker {
+  var _pending = '';
+
+  String add(String chunk) {
+    var text = _pending + chunk;
+    _pending = '';
+    final escape = text.lastIndexOf('\x1B');
+    if (escape >= 0) {
+      final tail = text.substring(escape);
+      if (tail.length < 32 && _ansiEscape.matchAsPrefix(tail) == null) {
+        _pending = tail;
+        text = text.substring(0, escape);
+      }
+    }
+    return stripAnsiEscapeCodes(text);
+  }
+
+  String flush() {
+    final text = stripAnsiEscapeCodes(_pending);
+    _pending = '';
+    return text;
+  }
 }
 
 String? extractUniqueIdFromCubeProgrammerOutput(String output) {

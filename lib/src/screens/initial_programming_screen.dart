@@ -23,7 +23,10 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
 
   var _debugInterface = DebugInterface.swd;
   var _programming = false;
+  var _skipHwRevision = false;
   ProgrammingResult? _lastResult;
+  final _console = ConsoleBuffer();
+  Timer? _consoleRefresh;
   SavedProgrammingLog? _savedLog;
   String? _logError;
   String? _error;
@@ -77,6 +80,7 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
     _calibrationPathController.dispose();
     _flashAddressController.dispose();
     _hwRevisionController.dispose();
+    _consoleRefresh?.cancel();
     super.dispose();
   }
 
@@ -87,6 +91,17 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
       _savedLog = null;
       _logError = null;
       _error = null;
+      _console.clear();
+    });
+  }
+
+  /// Adds live CLI output. Repaints at most every 50 ms, because the
+  /// progress bar sends many small chunks.
+  void _appendConsole(String text) {
+    _console.write(text);
+    _consoleRefresh ??= Timer(const Duration(milliseconds: 50), () {
+      _consoleRefresh = null;
+      if (mounted) setState(() {});
     });
   }
 
@@ -133,6 +148,7 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
       _lastResult = null;
       _savedLog = null;
       _logError = null;
+      _console.clear();
     });
     await _saveSettings();
 
@@ -145,7 +161,9 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
           interface: _debugInterface,
           flashAddress: _flashAddressController.text,
           hwRevision: _hwRevisionController.text,
+          skipHwRevision: _skipHwRevision,
         ),
+        onOutput: _appendConsole,
       );
       if (!mounted) return;
       setState(() {
@@ -231,7 +249,11 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                           context,
                           programmed: programmed,
                         );
-                        final output = _ProgramOutput(result: _lastResult);
+                        final output = _ProgramOutput(
+                          text: _console.isEmpty
+                              ? 'Programmer output will appear here.'
+                              : _console.text,
+                        );
 
                         if (wide) {
                           return Row(
@@ -361,6 +383,7 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                             _debugInterface = selection.single;
                             _lastResult = null;
                             _error = null;
+                            _console.clear();
                           });
                         },
                 ),
@@ -372,7 +395,7 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                 Expanded(
                   child: TextField(
                     controller: _hwRevisionController,
-                    enabled: !_programming,
+                    enabled: !_programming && !_skipHwRevision,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       labelText: 'HW Revision string',
@@ -388,7 +411,24 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            CheckboxListTile(
+              value: _skipHwRevision,
+              onChanged: _programming
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _skipHwRevision = value ?? false;
+                        _lastResult = null;
+                        _error = null;
+                        _console.clear();
+                      });
+                    },
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: const Text('Skip HW revision OTP write'),
+            ),
+            const SizedBox(height: 4),
             Row(
               children: [
                 Expanded(
@@ -435,7 +475,7 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                 color: const Color(0xff087443),
                 text:
                     'Initial firmware and default calibration programmed and '
-                    'verified. ${_lastResult!.otpResult?.summary ?? ''}',
+                    'verified. ${_lastResult!.hwRevisionSkipped ? 'HW revision OTP write skipped.' : _lastResult!.otpResult?.summary ?? ''}',
               ),
             ],
             if (_savedLog != null) ...[
@@ -594,41 +634,41 @@ class _ProgrammingNotice extends StatelessWidget {
   }
 }
 
-class _ProgramOutput extends StatelessWidget {
-  const _ProgramOutput({required this.result});
+class _ProgramOutput extends StatefulWidget {
+  const _ProgramOutput({required this.text});
 
-  final ProgrammingResult? result;
+  final String text;
+
+  @override
+  State<_ProgramOutput> createState() => _ProgramOutputState();
+}
+
+class _ProgramOutputState extends State<_ProgramOutput> {
+  final _scrollController = ScrollController();
+
+  @override
+  void didUpdateWidget(_ProgramOutput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.text == oldWidget.text || !_scrollController.hasClients) return;
+    // Follow new output, unless the user scrolled up to read something.
+    final position = _scrollController.position;
+    final atBottom = position.pixels >= position.maxScrollExtent - 24;
+    if (!atBottom) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final output = result == null
-        ? 'Programmer output will appear here.'
-        : [
-            'Device ID: ${result!.deviceId}',
-            '',
-            result!.uidReadCommandLine,
-            '',
-            if (result!.uidReadStdout.trim().isNotEmpty)
-              result!.uidReadStdout.trimRight(),
-            if (result!.uidReadStderr.trim().isNotEmpty)
-              result!.uidReadStderr.trimRight(),
-            '',
-            result!.commandLine,
-            '',
-            if (result!.stdout.trim().isNotEmpty) result!.stdout.trimRight(),
-            if (result!.stderr.trim().isNotEmpty) result!.stderr.trimRight(),
-            if (result!.otpTranscript.trim().isNotEmpty) ...[
-              '',
-              '--- HW revision OTP ---',
-              '',
-              result!.otpTranscript.trimRight(),
-            ],
-            if (result!.otpError != null) ...[
-              '',
-              'OTP error: ${result!.otpError}',
-            ],
-          ].join('\n');
-
     return DecoratedBox(
       decoration: BoxDecoration(
         color: const Color(0xff1f2421),
@@ -637,8 +677,9 @@ class _ProgramOutput extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: SingleChildScrollView(
+          controller: _scrollController,
           child: SelectableText(
-            output,
+            widget.text,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: const Color(0xffe8f1ea),
               fontFamily: 'monospace',

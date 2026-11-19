@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
 
+import 'console_buffer.dart';
 import 'ecu_protocol.dart';
 import 'initial_programming.dart';
 import 'otp_hw_revision.dart';

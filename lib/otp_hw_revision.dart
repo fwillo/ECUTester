@@ -31,7 +31,11 @@ const List<int> otpMagic = [0x44, 0x50, 0x48, 0x57]; // "DPHW"
 const int otpLayoutVersion = 1;
 
 typedef ProcessRunner =
-    Future<ProcessResult> Function(String executable, List<String> arguments);
+    Future<ProcessResult> Function(
+      String executable,
+      List<String> arguments, [
+      OutputCallback? onOutput,
+    ]);
 
 /// Returns an error message, or null if [revision] can be written to OTP.
 String? validateHwRevision(String revision) {
@@ -294,10 +298,14 @@ class OtpProgrammer {
     required this.executablePath,
     required this.interface,
     ProcessRunner? runProcess,
+    this.onOutput,
     this.retryDelay = const Duration(seconds: 2),
-  }) : _runProcess = runProcess ?? Process.run;
+  }) : _runProcess = runProcess ?? runStreamingProcess;
 
   final String executablePath;
+
+  /// Receives commands, CLI output and messages while they happen.
+  final OutputCallback? onOutput;
   final DebugInterface interface;
   final Duration retryDelay;
   final ProcessRunner _runProcess;
@@ -315,7 +323,10 @@ class OtpProgrammer {
     'DEV_CONNECT_ERR',
   ];
 
-  void _log(String message) => _transcript.writeln(message);
+  void _log(String message) {
+    _transcript.writeln(message);
+    onOutput?.call('$message\n');
+  }
 
   Future<String> _run(List<String> arguments, {int attempts = 3}) async {
     final command = [
@@ -330,10 +341,13 @@ class OtpProgrammer {
     );
     for (var attempt = 1; ; attempt++) {
       _log(commandLine);
-      final result = await _runProcess(executablePath, command);
+      onOutput?.call('\n');
+      // The runner streams the CLI output to [onOutput] itself.
+      final result = await _runProcess(executablePath, command, onOutput);
       final output = stripAnsiEscapeCodes('${result.stdout}${result.stderr}');
-      if (output.trim().isNotEmpty) _log(output.trimRight());
-      _log('');
+      if (output.trim().isNotEmpty) _transcript.writeln(output.trimRight());
+      _transcript.writeln();
+      onOutput?.call(output.endsWith('\n') ? '\n' : '\n\n');
       if (result.exitCode == 0 && !output.contains('Error:')) return output;
 
       final connectFailed = connectErrors.any(output.contains);
