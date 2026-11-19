@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform, Process, ProcessException;
+import 'dart:io' show File, Platform, Process, ProcessException;
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
@@ -9,12 +9,14 @@ import 'package:flutter_libserialport/flutter_libserialport.dart';
 
 import 'ecu_protocol.dart';
 import 'initial_programming.dart';
+import 'otp_hw_revision.dart';
 import 'programming_log_writer.dart';
 import 'programming_settings.dart';
 import 'test_log_writer.dart';
 
 part 'src/serial_transport.dart';
 part 'src/screens/initial_programming_screen.dart';
+part 'src/screens/otp_status_screen.dart';
 part 'src/screens/uart_selection_screen.dart';
 part 'src/screens/data_collection_screen.dart';
 part 'src/screens/test_result_screen.dart';

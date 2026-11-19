@@ -17,6 +17,7 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
   final _firmwarePathController = TextEditingController();
   final _calibrationPathController = TextEditingController();
   final _flashAddressController = TextEditingController(text: '0x08000000');
+  final _hwRevisionController = TextEditingController(text: 'Rev 1.14');
   final _programmer = const Stm32CubeProgrammer();
   final _settingsStore = ProgrammingSettingsStore();
 
@@ -34,6 +35,7 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
     _firmwarePathController.addListener(_clearProgrammingResult);
     _calibrationPathController.addListener(_clearProgrammingResult);
     _flashAddressController.addListener(_clearProgrammingResult);
+    _hwRevisionController.addListener(_clearProgrammingResult);
     _loadSettings();
   }
 
@@ -69,10 +71,12 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
     _firmwarePathController.removeListener(_clearProgrammingResult);
     _calibrationPathController.removeListener(_clearProgrammingResult);
     _flashAddressController.removeListener(_clearProgrammingResult);
+    _hwRevisionController.removeListener(_clearProgrammingResult);
     _programmerPathController.dispose();
     _firmwarePathController.dispose();
     _calibrationPathController.dispose();
     _flashAddressController.dispose();
+    _hwRevisionController.dispose();
     super.dispose();
   }
 
@@ -140,14 +144,18 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
           calibrationPath: _calibrationPathController.text,
           interface: _debugInterface,
           flashAddress: _flashAddressController.text,
+          hwRevision: _hwRevisionController.text,
         ),
       );
       if (!mounted) return;
       setState(() {
         _lastResult = result;
-        _error = result.succeeded
-            ? null
-            : 'STM32CubeProgrammer exited with code ${result.exitCode}.';
+        _error = !result.flashSucceeded
+            ? 'STM32CubeProgrammer exited with code ${result.exitCode}.'
+            : result.otpError != null
+            ? 'Firmware programmed and verified, but writing the HW revision '
+                  'to OTP failed: ${result.otpError}'
+            : null;
       });
 
       try {
@@ -166,6 +174,18 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
         setState(() => _programming = false);
       }
     }
+  }
+
+  void _openOtpStatus() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OtpStatusScreen(
+          executablePath: _programmerPathController.text.trim(),
+          interface: _debugInterface,
+        ),
+      ),
+    );
   }
 
   void _continueToTesting() {
@@ -306,9 +326,21 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
               onBrowse: _programming ? null : _pickCalibrationPath,
             ),
             const SizedBox(height: 14),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final interfaceSelector = SegmentedButton<DebugInterface>(
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _flashAddressController,
+                    enabled: !_programming,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Flash address',
+                      prefixIcon: Icon(Icons.location_on_outlined),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SegmentedButton<DebugInterface>(
                   segments: const [
                     ButtonSegment(
                       value: DebugInterface.swd,
@@ -331,79 +363,63 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                             _error = null;
                           });
                         },
-                );
-                final addressField = TextField(
-                  controller: _flashAddressController,
-                  enabled: !_programming,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Flash address',
-                    prefixIcon: Icon(Icons.location_on_outlined),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _hwRevisionController,
+                    enabled: !_programming,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'HW Revision string',
+                      prefixIcon: Icon(Icons.tag),
+                    ),
                   ),
-                );
-
-                if (constraints.maxWidth < 560) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      addressField,
-                      const SizedBox(height: 12),
-                      interfaceSelector,
-                    ],
-                  );
-                }
-
-                return Row(
-                  children: [
-                    Expanded(child: addressField),
-                    const SizedBox(width: 12),
-                    interfaceSelector,
-                  ],
-                );
-              },
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: _programming ? null : _openOtpStatus,
+                  icon: const Icon(Icons.memory),
+                  label: const Text('OTP status'),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final programButton = FilledButton.icon(
-                  onPressed: _programming ? null : _programDevice,
-                  icon: _programming
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
-                        )
-                      : const Icon(Icons.play_arrow),
-                  label: Text(_programming ? 'Programming...' : 'Program'),
-                );
-                final testButton = OutlinedButton.icon(
-                  onPressed: _programming ? null : _continueToTesting,
-                  icon: const Icon(Icons.chevron_right),
-                  label: Text(
-                    programmed
-                        ? 'Continue to UART Test'
-                        : 'Test Already Programmed',
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _programming ? null : _programDevice,
+                    icon: _programming
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          )
+                        : const Icon(Icons.play_arrow),
+                    label: Text(
+                      _programming ? 'Programming...' : 'Program',
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                );
-
-                if (constraints.maxWidth < 620) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      programButton,
-                      const SizedBox(height: 10),
-                      testButton,
-                    ],
-                  );
-                }
-
-                return Row(
-                  children: [
-                    Expanded(child: programButton),
-                    const SizedBox(width: 12),
-                    Expanded(child: testButton),
-                  ],
-                );
-              },
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _programming ? null : _continueToTesting,
+                    icon: const Icon(Icons.chevron_right),
+                    label: Text(
+                      programmed
+                          ? 'Continue to UART Test'
+                          : 'Test Already Programmed',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ],
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
@@ -414,11 +430,12 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
               ),
             ] else if (programmed) ...[
               const SizedBox(height: 12),
-              const _ProgrammingNotice(
+              _ProgrammingNotice(
                 icon: Icons.check_circle_outline,
-                color: Color(0xff087443),
+                color: const Color(0xff087443),
                 text:
-                    'Initial firmware and default calibration programmed and verified.',
+                    'Initial firmware and default calibration programmed and '
+                    'verified. ${_lastResult!.otpResult?.summary ?? ''}',
               ),
             ],
             if (_savedLog != null) ...[
@@ -600,6 +617,16 @@ class _ProgramOutput extends StatelessWidget {
             '',
             if (result!.stdout.trim().isNotEmpty) result!.stdout.trimRight(),
             if (result!.stderr.trim().isNotEmpty) result!.stderr.trimRight(),
+            if (result!.otpTranscript.trim().isNotEmpty) ...[
+              '',
+              '--- HW revision OTP ---',
+              '',
+              result!.otpTranscript.trimRight(),
+            ],
+            if (result!.otpError != null) ...[
+              '',
+              'OTP error: ${result!.otpError}',
+            ],
           ].join('\n');
 
     return DecoratedBox(

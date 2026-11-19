@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'otp_hw_revision.dart';
+
 const int stm32f767UniqueIdAddress = 0x1FF0F420;
 const int stm32UniqueIdByteLength = 12;
 const int calibrationPrimaryAddress = 0x08100000;
@@ -22,6 +24,7 @@ class ProgrammingRequest {
     required this.calibrationPath,
     required this.interface,
     required this.flashAddress,
+    required this.hwRevision,
   });
 
   final String executablePath;
@@ -29,6 +32,9 @@ class ProgrammingRequest {
   final String calibrationPath;
   final DebugInterface interface;
   final String flashAddress;
+
+  /// Written to the first free OTP block after programming and verification.
+  final String hwRevision;
 }
 
 class ProgrammingResult {
@@ -44,6 +50,10 @@ class ProgrammingResult {
     required this.exitCode,
     required this.stdout,
     required this.stderr,
+    this.hwRevision = '',
+    this.otpTranscript = '',
+    this.otpResult,
+    this.otpError,
   });
 
   final String deviceId;
@@ -57,8 +67,13 @@ class ProgrammingResult {
   final int exitCode;
   final String stdout;
   final String stderr;
+  final String hwRevision;
+  final String otpTranscript;
+  final OtpWriteResult? otpResult;
+  final String? otpError;
 
-  bool get succeeded => exitCode == 0;
+  bool get flashSucceeded => exitCode == 0;
+  bool get succeeded => flashSucceeded && otpError == null;
 }
 
 class UniqueIdReadException implements Exception {
@@ -113,6 +128,10 @@ class Stm32CubeProgrammer {
     if (!RegExp(r'^0x[0-9A-Fa-f]+$').hasMatch(flashAddress)) {
       throw const FormatException('Flash address must look like 0x08000000.');
     }
+    final hwRevisionError = validateHwRevision(request.hwRevision);
+    if (hwRevisionError != null) {
+      throw FormatException(hwRevisionError);
+    }
 
     final executable = File(executablePath);
     if (!await executable.exists()) {
@@ -163,6 +182,24 @@ class Stm32CubeProgrammer {
     final arguments = buildArguments(request);
     final result = await Process.run(executablePath, arguments);
 
+    // Only after programming and verification succeeded: write the hardware
+    // revision to OTP.
+    OtpWriteResult? otpResult;
+    String? otpError;
+    var otpTranscript = '';
+    if (result.exitCode == 0) {
+      final otp = OtpProgrammer(
+        executablePath: executablePath,
+        interface: request.interface,
+      );
+      try {
+        otpResult = await otp.programHwRevision(request.hwRevision);
+      } catch (error) {
+        otpError = error.toString();
+      }
+      otpTranscript = otp.transcript;
+    }
+
     return ProgrammingResult(
       deviceId: deviceId,
       startedAt: startedAt,
@@ -175,6 +212,10 @@ class Stm32CubeProgrammer {
       exitCode: result.exitCode,
       stdout: stripAnsiEscapeCodes(result.stdout.toString()),
       stderr: stripAnsiEscapeCodes(result.stderr.toString()),
+      hwRevision: request.hwRevision,
+      otpTranscript: otpTranscript,
+      otpResult: otpResult,
+      otpError: otpError,
     );
   }
 

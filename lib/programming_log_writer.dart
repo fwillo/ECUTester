@@ -77,14 +77,23 @@ class ProgrammingLogWriter {
       )
       ..writeln('# Programming command,${_csv(result.commandLine)}')
       ..writeln('# Programming exit code,${_csv(result.exitCode.toString())}')
+      ..writeln('# HW revision,${_csv(result.hwRevision)}')
+      ..writeln('# OTP result,${_csv(_otpResultText(result))}')
       ..writeln()
       ..writeln('section,stream,line')
       ..write(_outputRows('uid_read', 'stdout', result.uidReadStdout))
       ..write(_outputRows('uid_read', 'stderr', result.uidReadStderr))
       ..write(_outputRows('programming', 'stdout', result.stdout))
-      ..write(_outputRows('programming', 'stderr', result.stderr));
+      ..write(_outputRows('programming', 'stderr', result.stderr))
+      ..write(_outputRows('otp_hw_revision', 'log', result.otpTranscript));
     return buffer.toString();
   }
+}
+
+String _otpResultText(ProgrammingResult result) {
+  if (!result.flashSucceeded) return 'SKIPPED';
+  if (result.otpError != null) return 'FAIL: ${result.otpError}';
+  return 'PASS: ${result.otpResult?.summary ?? ''}';
 }
 
 String _outputRows(String section, String stream, String output) {
