@@ -18,6 +18,9 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
   final _calibrationPathController = TextEditingController();
   final _flashAddressController = TextEditingController(text: '0x08000000');
   final _hwRevisionController = TextEditingController();
+  final _openBltVersionController = TextEditingController(
+    text: defaultOpenBltVersion,
+  );
   final _programmer = const Stm32CubeProgrammer();
   final _settingsStore = ProgrammingSettingsStore();
 
@@ -39,6 +42,7 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
     _calibrationPathController.addListener(_clearProgrammingResult);
     _flashAddressController.addListener(_clearProgrammingResult);
     _hwRevisionController.addListener(_clearProgrammingResult);
+    _openBltVersionController.addListener(_clearProgrammingResult);
     _loadSettings();
   }
 
@@ -75,11 +79,13 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
     _calibrationPathController.removeListener(_clearProgrammingResult);
     _flashAddressController.removeListener(_clearProgrammingResult);
     _hwRevisionController.removeListener(_clearProgrammingResult);
+    _openBltVersionController.removeListener(_clearProgrammingResult);
     _programmerPathController.dispose();
     _firmwarePathController.dispose();
     _calibrationPathController.dispose();
     _flashAddressController.dispose();
     _hwRevisionController.dispose();
+    _openBltVersionController.dispose();
     _consoleRefresh?.cancel();
     super.dispose();
   }
@@ -161,6 +167,7 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
           interface: _debugInterface,
           flashAddress: _flashAddressController.text,
           hwRevision: _hwRevisionController.text,
+          openBltVersion: _openBltVersionController.text,
           skipHwRevision: _skipHwRevision,
         ),
         onOutput: _appendConsole,
@@ -400,6 +407,18 @@ class _InitialProgrammingScreenState extends State<InitialProgrammingScreen> {
                       border: OutlineInputBorder(),
                       labelText: 'HW Revision string',
                       prefixIcon: Icon(Icons.tag),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 150,
+                  child: TextField(
+                    controller: _openBltVersionController,
+                    enabled: !_programming && !_skipHwRevision,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'OpenBLT version',
                     ),
                   ),
                 ),

@@ -197,7 +197,11 @@ class _OtpSummary extends StatelessWidget {
             effective?.revision ??
             (state.anyProgrammed ? 'INVALID' : 'UNPROGRAMMED'),
         detail: effective != null
-            ? 'Block ${effective.index}'
+            ? [
+                'Block ${effective.index}',
+                if (state.status(effective.index).extrasText.isNotEmpty)
+                  state.status(effective.index).extrasText,
+              ].join(' · ')
             : 'No valid block found',
       ),
       _OtpSummaryTile(
@@ -398,9 +402,21 @@ class _OtpBlockRow extends StatelessWidget {
     };
 
     final Widget content = switch (block.kind) {
-      OtpBlockKind.valid => Text(
-        block.revision!,
-        style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+      OtpBlockKind.valid => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            block.revision!,
+            style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          Text(
+            block.extrasText.isEmpty
+                ? 'OpenBLT version, manufacturer and date not recorded'
+                : block.extrasText,
+            style: textTheme.bodySmall?.copyWith(color: muted),
+          ),
+        ],
       ),
       OtpBlockKind.invalid => Text(
         block.reason!,

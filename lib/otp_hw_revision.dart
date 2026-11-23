@@ -5,10 +5,17 @@
 //   bytes  0..3   magic "DPHW"
 //   byte   4      layout version (1)
 //   bytes  5..20  hardware revision, printable ASCII, padded with 0x00
-//   bytes 21..59  reserved (0x00)
+//   bytes 21..23  OpenBLT version MAJOR, MINOR, PATCH (uint8 each)
+//   bytes 24..27  manufacturer, 4 ASCII characters (always "WEYT")
+//   bytes 28..31  programming date, Unix time (uint32, UTC), little-endian
+//   bytes 32..59  reserved (0x00)
 //   bytes 60..63  CRC32 (zlib) over bytes 0..59, little-endian
 //
-// The firmware uses the last valid block, so a new revision is always written
+// Bytes 21..31 were reserved (0x00) in older blocks; the layout version stays
+// 1, so older firmware still accepts new blocks. All-zero fields mean "not
+// recorded".
+//
+// The firmware uses the last valid block, so new data is always written
 // to the first erased block after the last programmed one, then locked. The
 // lock bytes live in a 32-byte chunk at 0x1FF0F400; CubeProgrammer only writes
 // the OTP area in 32-byte aligned chunks, so the whole chunk is rewritten from
@@ -29,6 +36,14 @@ const int otpBlockCount = 16;
 const int otpRevisionSize = 16;
 const List<int> otpMagic = [0x44, 0x50, 0x48, 0x57]; // "DPHW"
 const int otpLayoutVersion = 1;
+const int otpOpenBltOffset = 21;
+const int otpManufacturerOffset = 24;
+const int otpManufacturerSize = 4;
+const int otpDateOffset = 28;
+
+/// Recorded in every new block; there is no input for it.
+const String otpManufacturer = 'WEYT';
+const String defaultOpenBltVersion = '1.16.0';
 
 typedef ProcessRunner =
     Future<ProcessResult> Function(
@@ -53,6 +68,27 @@ String? validateHwRevision(String revision) {
   return null;
 }
 
+/// Parses "MAJOR.MINOR.PATCH" with each part 0..255, or returns null.
+List<int>? parseOpenBltVersion(String text) {
+  final parts = text.trim().split('.');
+  if (parts.length != 3) return null;
+  final values = <int>[];
+  for (final part in parts) {
+    if (!RegExp(r'^[0-9]{1,3}$').hasMatch(part)) return null;
+    final value = int.parse(part);
+    if (value > 255) return null;
+    values.add(value);
+  }
+  return values;
+}
+
+/// Returns an error message, or null if [version] can be written to OTP.
+String? validateOpenBltVersion(String version) {
+  if (parseOpenBltVersion(version) != null) return null;
+  return 'Enter the OpenBLT version as MAJOR.MINOR.PATCH with each part '
+      '0 to 255, for example "$defaultOpenBltVersion".';
+}
+
 /// CRC-32 as computed by zlib.crc32.
 int crc32(List<int> data) {
   var crc = 0xFFFFFFFF;
@@ -65,12 +101,26 @@ int crc32(List<int> data) {
   return crc ^ 0xFFFFFFFF;
 }
 
-Uint8List buildOtpBlock(String revision) {
+Uint8List buildOtpBlock(
+  String revision, {
+  required List<int> openBltVersion,
+  required String manufacturer,
+  required DateTime programmedAt,
+}) {
   final block = Uint8List(otpBlockSize);
   block.setAll(0, otpMagic);
   block[4] = otpLayoutVersion;
   block.setAll(5, revision.codeUnits);
-  ByteData.sublistView(block).setUint32(
+  block.setAll(otpOpenBltOffset, openBltVersion);
+  block.setAll(otpManufacturerOffset, manufacturer.codeUnits);
+  final data = ByteData.sublistView(block);
+  // Unix time is UTC by definition, whatever the local time zone is.
+  data.setUint32(
+    otpDateOffset,
+    programmedAt.millisecondsSinceEpoch ~/ 1000,
+    Endian.little,
+  );
+  data.setUint32(
     otpBlockSize - 4,
     crc32(block.sublist(0, otpBlockSize - 4)),
     Endian.little,
@@ -117,6 +167,45 @@ Uint8List buildOtpBlock(String revision) {
   return (revision: String.fromCharCodes(text), reason: null);
 }
 
+/// Revision, OpenBLT version and manufacturer. A block with the same identity
+/// as the one in use is not written again (the date is not compared).
+Uint8List otpBlockIdentity(Uint8List block) =>
+    Uint8List.sublistView(block, 5, otpDateOffset);
+
+/// OpenBLT version, manufacturer and date of a block; null if not recorded.
+({String? openBltVersion, String? manufacturer, DateTime? programmedAt})
+decodeOtpExtras(Uint8List block) {
+  final version = block.sublist(otpOpenBltOffset, otpOpenBltOffset + 3);
+  var end = otpManufacturerOffset + otpManufacturerSize;
+  while (end > otpManufacturerOffset && block[end - 1] == 0) {
+    end--;
+  }
+  final manufacturer = block.sublist(otpManufacturerOffset, end);
+  final seconds = ByteData.sublistView(
+    block,
+  ).getUint32(otpDateOffset, Endian.little);
+  return (
+    openBltVersion: version.every((v) => v == 0) ? null : version.join('.'),
+    manufacturer: manufacturer.isEmpty
+        ? null
+        : String.fromCharCodes(
+            manufacturer.map((c) => _isPrintableAscii(c) ? c : 0x2E),
+          ),
+    programmedAt: seconds == 0
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true),
+  );
+}
+
+/// "2026-11-23 14:00:00 UTC"
+String formatOtpDate(DateTime date) {
+  final utc = date.toUtc();
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${utc.year.toString().padLeft(4, '0')}-${two(utc.month)}-'
+      '${two(utc.day)} ${two(utc.hour)}:${two(utc.minute)}:'
+      '${two(utc.second)} UTC';
+}
+
 enum OtpBlockKind { erased, valid, invalid }
 
 class OtpBlockStatus {
@@ -127,6 +216,9 @@ class OtpBlockStatus {
     required this.kind,
     this.revision,
     this.reason,
+    this.openBltVersion,
+    this.manufacturer,
+    this.programmedAt,
   });
 
   final int index;
@@ -135,8 +227,19 @@ class OtpBlockStatus {
   final OtpBlockKind kind;
   final String? revision;
   final String? reason;
+  final String? openBltVersion;
+  final String? manufacturer;
+  final DateTime? programmedAt;
 
   int get address => otpBase + index * otpBlockSize;
+
+  /// "OpenBLT 1.16.0, WEYT, 2026-11-23 14:00:00 UTC"; fields not recorded
+  /// are left out, like `make_hw_rev_otp.py`.
+  String get extrasText => [
+    if (openBltVersion != null) 'OpenBLT $openBltVersion',
+    ?manufacturer,
+    if (programmedAt != null) formatOtpDate(programmedAt!),
+  ].join(', ');
 }
 
 class OtpState {
@@ -179,13 +282,18 @@ class OtpState {
       );
     }
     final check = checkOtpBlock(block(index));
+    final valid = check.revision != null;
+    final extras = decodeOtpExtras(block(index));
     return OtpBlockStatus(
       index: index,
       bytes: block(index),
       locked: locked,
-      kind: check.revision != null ? OtpBlockKind.valid : OtpBlockKind.invalid,
+      kind: valid ? OtpBlockKind.valid : OtpBlockKind.invalid,
       revision: check.revision,
       reason: check.reason,
+      openBltVersion: valid ? extras.openBltVersion : null,
+      manufacturer: valid ? extras.manufacturer : null,
+      programmedAt: valid ? extras.programmedAt : null,
     );
   }
 
@@ -230,7 +338,9 @@ class OtpState {
     for (final block in blocks) {
       final content = switch (block.kind) {
         OtpBlockKind.erased => 'erased',
-        OtpBlockKind.valid => "valid '${block.revision}'",
+        OtpBlockKind.valid =>
+          "valid '${block.revision}'"
+              '${block.extrasText.isEmpty ? '' : ', ${block.extrasText}'}',
         OtpBlockKind.invalid => 'INVALID: ${block.reason}',
       };
       final lock = (block.locked ? 'locked' : '-').padRight(6);
@@ -278,21 +388,25 @@ class OtpWriteResult {
     required this.action,
     required this.blockIndex,
     required this.revision,
+    required this.openBltVersion,
     required this.finalState,
   });
 
   final OtpWriteAction action;
   final int blockIndex;
   final String revision;
+  final String openBltVersion;
   final OtpState finalState;
+
+  String get _what => "'$revision' (OpenBLT $openBltVersion, $otpManufacturer)";
 
   String get summary => switch (action) {
     OtpWriteAction.written =>
-      "HW revision '$revision' written to OTP block $blockIndex and locked.",
+      'HW revision $_what written to OTP block $blockIndex and locked.',
     OtpWriteAction.lockedExisting =>
-      "OTP block $blockIndex already held '$revision'; it is now locked.",
+      'OTP block $blockIndex already held $_what; it is now locked.',
     OtpWriteAction.alreadyPresent =>
-      "OTP block $blockIndex already holds '$revision' and is locked.",
+      'OTP block $blockIndex already holds $_what and is locked.',
   };
 }
 
@@ -425,44 +539,63 @@ class OtpProgrammer {
     return readBack;
   }
 
-  /// Writes [revision] to the first free block after the last programmed
-  /// one, verifies it and locks it, like `make_hw_rev_otp.py --yes`.
-  Future<OtpWriteResult> programHwRevision(String revision) async {
-    final validationError = validateHwRevision(revision);
+  /// Writes [revision], [openBltVersion], the manufacturer and the date of
+  /// this run to the first free block after the last programmed one,
+  /// verifies it and locks it, like `make_hw_rev_otp.py --yes`. Nothing is
+  /// written if the block in use already holds the same revision, OpenBLT
+  /// version and manufacturer.
+  Future<OtpWriteResult> programHwRevision(
+    String revision, {
+    required String openBltVersion,
+    DateTime? programmedAt,
+  }) async {
+    final validationError =
+        validateHwRevision(revision) ?? validateOpenBltVersion(openBltVersion);
     if (validationError != null) throw OtpException(validationError);
+    final version = parseOpenBltVersion(openBltVersion)!;
+    final versionText = version.join('.');
+    final block = buildOtpBlock(
+      revision,
+      openBltVersion: version,
+      manufacturer: otpManufacturer,
+      programmedAt: programmedAt ?? DateTime.now(),
+    );
+    final what = "'$revision', OpenBLT $versionText, $otpManufacturer";
+    OtpWriteResult result(OtpWriteAction action, int index, OtpState state) =>
+        OtpWriteResult(
+          action: action,
+          blockIndex: index,
+          revision: revision,
+          openBltVersion: versionText,
+          finalState: state,
+        );
 
     var state = await readOtp();
     _log(state.toText());
     _log('');
 
     final eff = state.effective;
-    if (eff != null && eff.revision == revision) {
+    if (eff != null &&
+        _bytesEqual(
+          otpBlockIdentity(state.block(eff.index)),
+          otpBlockIdentity(block),
+        )) {
       if (state.isLocked(eff.index)) {
         _log(
-          "Nothing to do: block ${eff.index} already holds '$revision' "
+          'Nothing to do: block ${eff.index} already holds $what '
           'and is locked.',
         );
-        return OtpWriteResult(
-          action: OtpWriteAction.alreadyPresent,
-          blockIndex: eff.index,
-          revision: revision,
-          finalState: state,
-        );
+        return result(OtpWriteAction.alreadyPresent, eff.index, state);
       }
       _log(
-        "Block ${eff.index} already holds '$revision' but is not locked; "
+        'Block ${eff.index} already holds $what but is not locked; '
         'only locking it.',
       );
       state = await _writeLock(state, eff.index);
       _log('Block ${eff.index} locked.');
       _log('');
       _log(state.toText());
-      return OtpWriteResult(
-        action: OtpWriteAction.lockedExisting,
-        blockIndex: eff.index,
-        revision: revision,
-        finalState: state,
-      );
+      return result(OtpWriteAction.lockedExisting, eff.index, state);
     }
 
     final blockIndex = state.nextFreeBlock;
@@ -473,11 +606,10 @@ class OtpProgrammer {
     }
     final blockAddress = otpBase + blockIndex * otpBlockSize;
     _log(
-      "Plan: write '$revision' to block $blockIndex at "
+      'Plan: write $what to block $blockIndex at '
       '${_hexAddress(blockAddress)}, then lock it.',
     );
 
-    final block = buildOtpBlock(revision);
     await _write(block, blockAddress);
     state = await readOtp();
     final written = state.effective;
@@ -495,12 +627,7 @@ class OtpProgrammer {
     _log('Block $blockIndex locked.');
     _log('');
     _log(state.toText());
-    return OtpWriteResult(
-      action: OtpWriteAction.written,
-      blockIndex: blockIndex,
-      revision: revision,
-      finalState: state,
-    );
+    return result(OtpWriteAction.written, blockIndex, state);
   }
 }
 

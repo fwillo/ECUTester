@@ -25,6 +25,7 @@ class ProgrammingRequest {
     required this.interface,
     required this.flashAddress,
     required this.hwRevision,
+    required this.openBltVersion,
     this.skipHwRevision = false,
   });
 
@@ -34,8 +35,12 @@ class ProgrammingRequest {
   final DebugInterface interface;
   final String flashAddress;
 
-  /// Written to the first free OTP block after programming and verification.
+  /// Written to the first free OTP block after programming and verification,
+  /// together with [openBltVersion], the manufacturer and the current date.
   final String hwRevision;
+
+  /// "MAJOR.MINOR.PATCH", e.g. "1.16.0".
+  final String openBltVersion;
 
   /// Skips the OTP write entirely (no validation, nothing written).
   final bool skipHwRevision;
@@ -55,6 +60,7 @@ class ProgrammingResult {
     required this.stdout,
     required this.stderr,
     this.hwRevision = '',
+    this.openBltVersion = '',
     this.hwRevisionSkipped = false,
     this.otpTranscript = '',
     this.otpResult,
@@ -73,6 +79,7 @@ class ProgrammingResult {
   final String stdout;
   final String stderr;
   final String hwRevision;
+  final String openBltVersion;
   final bool hwRevisionSkipped;
   final String otpTranscript;
   final OtpWriteResult? otpResult;
@@ -141,11 +148,12 @@ class Stm32CubeProgrammer {
     if (!RegExp(r'^0x[0-9A-Fa-f]+$').hasMatch(flashAddress)) {
       throw const FormatException('Flash address must look like 0x08000000.');
     }
-    final hwRevisionError = request.skipHwRevision
+    final otpInputError = request.skipHwRevision
         ? null
-        : validateHwRevision(request.hwRevision);
-    if (hwRevisionError != null) {
-      throw FormatException(hwRevisionError);
+        : validateHwRevision(request.hwRevision) ??
+              validateOpenBltVersion(request.openBltVersion);
+    if (otpInputError != null) {
+      throw FormatException(otpInputError);
     }
 
     final executable = File(executablePath);
@@ -222,7 +230,10 @@ class Stm32CubeProgrammer {
         onOutput: onOutput,
       );
       try {
-        otpResult = await otp.programHwRevision(request.hwRevision);
+        otpResult = await otp.programHwRevision(
+          request.hwRevision,
+          openBltVersion: request.openBltVersion,
+        );
       } catch (error) {
         otpError = error.toString();
         emit('\nOTP error: $otpError\n');
@@ -243,6 +254,7 @@ class Stm32CubeProgrammer {
       stdout: stripAnsiEscapeCodes(result.stdout.toString()),
       stderr: stripAnsiEscapeCodes(result.stderr.toString()),
       hwRevision: request.skipHwRevision ? '' : request.hwRevision,
+      openBltVersion: request.skipHwRevision ? '' : request.openBltVersion,
       hwRevisionSkipped: request.skipHwRevision,
       otpTranscript: otpTranscript,
       otpResult: otpResult,

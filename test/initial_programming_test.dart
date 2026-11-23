@@ -10,6 +10,7 @@ void main() {
       interface: DebugInterface.swd,
       flashAddress: '0x08000000',
       hwRevision: 'Rev 1.14',
+      openBltVersion: '1.16.0',
     );
 
     expect(Stm32CubeProgrammer.buildArguments(request), [
@@ -73,6 +74,7 @@ void main() {
       interface: DebugInterface.swd,
       flashAddress: '0x08000000',
       hwRevision: 'Rev 1.14',
+      openBltVersion: '1.16.0',
     );
 
     expect(Stm32CubeProgrammer.buildUniqueIdReadArguments(request), [

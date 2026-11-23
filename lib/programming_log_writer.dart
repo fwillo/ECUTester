@@ -78,6 +78,7 @@ class ProgrammingLogWriter {
       ..writeln('# Programming command,${_csv(result.commandLine)}')
       ..writeln('# Programming exit code,${_csv(result.exitCode.toString())}')
       ..writeln('# HW revision,${_csv(result.hwRevision)}')
+      ..writeln('# OpenBLT version,${_csv(result.openBltVersion)}')
       ..writeln('# OTP result,${_csv(_otpResultText(result))}')
       ..writeln()
       ..writeln('section,stream,line')
