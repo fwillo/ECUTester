@@ -699,9 +699,10 @@ class _ProgramOutputState extends State<_ProgramOutput> {
           controller: _scrollController,
           child: SelectableText(
             widget.text,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xffe8f1ea),
-              fontFamily: 'monospace',
+            style: _monospace(
+              Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xffe8f1ea)),
             ),
           ),
         ),

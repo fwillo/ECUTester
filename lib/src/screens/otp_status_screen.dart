@@ -356,6 +356,7 @@ class _OtpRowLayout extends StatelessWidget {
     required this.lock,
     required this.status,
     required this.content,
+    this.trailing,
   });
 
   final Widget block;
@@ -363,6 +364,10 @@ class _OtpRowLayout extends StatelessWidget {
   final Widget lock;
   final Widget status;
   final Widget content;
+
+  /// Right edge, e.g. the hex dump toggle. The slot is kept empty in other
+  /// rows so the columns stay aligned.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -373,12 +378,13 @@ class _OtpRowLayout extends StatelessWidget {
         SizedBox(width: 100, child: lock),
         SizedBox(width: 110, child: status),
         Expanded(child: content),
+        SizedBox(width: 40, child: trailing),
       ],
     );
   }
 }
 
-class _OtpBlockRow extends StatelessWidget {
+class _OtpBlockRow extends StatefulWidget {
   const _OtpBlockRow({
     required this.block,
     required this.inUse,
@@ -390,9 +396,24 @@ class _OtpBlockRow extends StatelessWidget {
   final bool nextWrite;
 
   @override
+  State<_OtpBlockRow> createState() => _OtpBlockRowState();
+}
+
+class _OtpBlockRowState extends State<_OtpBlockRow> {
+  /// Hex dump of a valid block, opened with the arrow at the right edge.
+  /// Invalid blocks always show their hex dump.
+  var _showHexdump = false;
+
+  @override
   Widget build(BuildContext context) {
+    final block = widget.block;
+    final inUse = widget.inUse;
+    final nextWrite = widget.nextWrite;
+    final showHexdump =
+        block.kind == OtpBlockKind.invalid ||
+        (block.kind == OtpBlockKind.valid && _showHexdump);
     final textTheme = Theme.of(context).textTheme;
-    final mono = textTheme.bodyMedium?.copyWith(fontFamily: 'monospace');
+    final mono = _monospace(textTheme.bodyMedium);
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
 
     final (statusLabel, statusColor) = switch (block.kind) {
@@ -477,8 +498,18 @@ class _OtpBlockRow extends StatelessWidget {
                   ),
               ],
             ),
+            trailing: block.kind == OtpBlockKind.valid
+                ? IconButton(
+                    tooltip: _showHexdump ? 'Hide hex dump' : 'Show hex dump',
+                    onPressed: () =>
+                        setState(() => _showHexdump = !_showHexdump),
+                    icon: Icon(
+                      _showHexdump ? Icons.expand_less : Icons.expand_more,
+                    ),
+                  )
+                : null,
           ),
-          if (block.kind == OtpBlockKind.invalid) ...[
+          if (showHexdump) ...[
             const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.only(left: 56),
@@ -493,9 +524,10 @@ class _OtpBlockRow extends StatelessWidget {
                     scrollDirection: Axis.horizontal,
                     child: SelectableText(
                       otpHexdump(block.bytes, block.address, indent: ''),
-                      style: textTheme.bodySmall?.copyWith(
-                        color: const Color(0xffe8f1ea),
-                        fontFamily: 'monospace',
+                      style: _monospace(
+                        textTheme.bodySmall?.copyWith(
+                          color: const Color(0xffe8f1ea),
+                        ),
                       ),
                     ),
                   ),
@@ -563,9 +595,10 @@ class _OtpTranscript extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: SelectableText(
           text.trimRight(),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: const Color(0xffe8f1ea),
-            fontFamily: 'monospace',
+          style: _monospace(
+            Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: const Color(0xffe8f1ea)),
           ),
         ),
       ),

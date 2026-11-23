@@ -1,5 +1,17 @@
 part of '../../main.dart';
 
+/// [style] with a fixed-width font. 'monospace' alone is only a font alias on
+/// Linux; on macOS and Windows Flutter would fall back to a proportional font,
+/// so the platform's own fixed-width font is named first.
+TextStyle? _monospace(TextStyle? style) => style?.copyWith(
+  fontFamily: Platform.isMacOS
+      ? 'Menlo'
+      : Platform.isWindows
+      ? 'Consolas'
+      : 'monospace',
+  fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New', 'monospace'],
+);
+
 class _ResultChip extends StatelessWidget {
   const _ResultChip({required this.label, required this.value});
 
