@@ -37,6 +37,9 @@ dependencies:
   flutter_libserialport: ^0.6.0
   crc32_checksum: ^0.0.2
   file_selector: ^1.1.0
+  # Material moved out of the Flutter SDK (package:flutter/material.dart is
+  # deprecated since Flutter 3.47).
+  material_ui: ^1.11.1
 
 dev_dependencies:
   flutter_test:
